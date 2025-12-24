@@ -22,7 +22,6 @@ export const auth = getAuth(app)
 export const db = typeof window !== 'undefined'
   ? initializeFirestore(app, {
     experimentalAutoDetectLongPolling: true,
-    useFetchStreams: false,
   })
   : getFirestore(app)
 export const storage = getStorage(app)
