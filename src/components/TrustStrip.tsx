@@ -8,12 +8,15 @@ interface TrustProofItem {
     highlight?: string
 }
 
-interface TrustStripProps {
+export interface TrustStripProps {
     items?: TrustProofItem[]
+    variant?: 'light' | 'default'
 }
 
-export const TrustStrip: React.FC<TrustStripProps> = ({
-    items }) => {
+export function TrustStrip({
+    items,
+    variant = 'default'
+}: TrustStripProps) {
     const ref = useScrollAnimation('fadeIn')
 
     const defaultItems: TrustProofItem[] = items || [
@@ -31,8 +34,12 @@ export const TrustStrip: React.FC<TrustStripProps> = ({
 
 
 
+    const bgClasses = variant === 'light'
+        ? "bg-white border-t border-b border-gray-100"
+        : "bg-gradient-to-br from-indigo-50 via-purple-50/30 to-blue-50/20 border-t border-b border-indigo-100/50";
+
     return (
-        <section className="relative py-16 sm:py-20 px-4 bg-gradient-to-br from-indigo-50 via-purple-50/30 to-blue-50/20 border-t border-b border-indigo-100/50 overflow-hidden">
+        <section className={`relative py-16 sm:py-20 px-4 overflow-hidden ${bgClasses}`}>
             {/* Subtle Background Pattern */}
             <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
 
