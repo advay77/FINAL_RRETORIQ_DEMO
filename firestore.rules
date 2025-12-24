@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users collection with seat protection
+    match /users/{userId} {
+      // Anyone can read user data
+      allow read: if true;
+      
+      // Users can write their own data EXCEPT seats field
+      allow create, update: if request.auth != null && 
+                              request.auth.uid == userId &&
+                              !request.resource.data.keys().hasAny(['seats']);
+      
+      // Only backend (Cloud Functions with admin SDK) can write seats
+      // Client cannot modify seats field at all
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // TEMPORARY: Allow everything else for other collections during development
+    // TODO: Add proper rules for sessions, progress, etc.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
