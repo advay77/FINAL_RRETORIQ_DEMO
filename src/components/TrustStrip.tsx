@@ -1,5 +1,5 @@
 import React from 'react'
-import { CheckCircle, Users, MessageSquare, TrendingUp } from 'lucide-react'
+import { Users, MessageSquare } from 'lucide-react'
 import { useScrollAnimation } from '../hooks/useGSAPAnimation'
 
 interface TrustProofItem {
@@ -10,13 +10,10 @@ interface TrustProofItem {
 
 interface TrustStripProps {
     items?: TrustProofItem[]
-    variant?: 'light' | 'dark'
 }
 
 export const TrustStrip: React.FC<TrustStripProps> = ({
-    items,
-    variant = 'light'
-}) => {
+    items }) => {
     const ref = useScrollAnimation('fadeIn')
 
     const defaultItems: TrustProofItem[] = items || [
@@ -32,10 +29,7 @@ export const TrustStrip: React.FC<TrustStripProps> = ({
         }
     ]
 
-    const bgColor = variant === 'light' ? 'bg-white border-t border-b border-gray-100' : 'bg-gray-50 border-t border-b border-gray-200'
-    const textColor = variant === 'light' ? 'text-gray-900' : 'text-gray-900'
-    const secondaryColor = variant === 'light' ? 'text-gray-600' : 'text-gray-700'
-    const iconColor = variant === 'light' ? 'text-indigo-600' : 'text-indigo-600'
+
 
     return (
         <section className="relative py-16 sm:py-20 px-4 bg-gradient-to-br from-indigo-50 via-purple-50/30 to-blue-50/20 border-t border-b border-indigo-100/50 overflow-hidden">
