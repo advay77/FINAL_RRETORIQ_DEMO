@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BookOpen, FileText, X } from 'lucide-react'
 import SEO from '../components/SEO'
+import { starFrameworkQuestions, type FrameworkQA } from '../data/frameworkQuestions'
 
 interface Resource {
   id: number
@@ -19,6 +20,7 @@ interface SampleFramework {
   detail: string
   accent: string
   detailLines?: { label: string; text: string }[]
+  questions?: FrameworkQA[]
 }
 
 const resources: Resource[] = [
@@ -157,7 +159,8 @@ const sampleFrameworks: SampleFramework[] = [
       { label: 'Task', text: 'spell out the objective or expectation.' },
       { label: 'Action', text: 'list the key steps you personally took.' },
       { label: 'Result', text: 'quantify the outcome and note one lesson learned.' }
-    ]
+    ],
+    questions: starFrameworkQuestions
   },
   {
     id: 2,
@@ -350,11 +353,16 @@ export default function Resources() {
                     {/* PDF Preview */}
                     <div className="relative h-64 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
                       <div className={`absolute inset-0 bg-gradient-to-br ${getCategoryColor(resource.category)} opacity-20`}></div>
-                      <iframe
-                        src={`/resources/${encodeURIComponent(resource.filename)}#toolbar=0&navpanes=0&scrollbar=0`}
+                      <object
+                        data={`/resources/${encodeURIComponent(resource.filename)}#toolbar=0&navpanes=0&scrollbar=0`}
+                        type="application/pdf"
                         className="w-full h-full pointer-events-none"
                         title={resource.title}
-                      />
+                      >
+                        <div className="flex items-center justify-center h-full">
+                          <FileText className="w-16 h-16 text-gray-400" />
+                        </div>
+                      </object>
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-4">
                         <button
                           onClick={() => setSelectedResource(resource)}
@@ -402,48 +410,170 @@ export default function Resources() {
 
           {activeCard === 'sample' && (
             <>
-              <div className="text-center mb-8">
-                <p className="text-lg font-semibold text-gray-800">Tap a blueprint to reveal the quick walkthrough.</p>
-                <p className="text-sm text-gray-600">Choose any framework to see how to structure and deliver your answer.</p>
-              </div>
+              {!selectedFramework ? (
+                <>
+                  <div className="text-center mb-8">
+                    <p className="text-lg font-semibold text-gray-800">Tap a blueprint to reveal the quick walkthrough.</p>
+                    <p className="text-sm text-gray-600">Choose any framework to see how to structure and deliver your answer.</p>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {sampleFrameworks.map(framework => {
-                  const isOpen = selectedFramework === framework.id
-                  return (
-                    <div key={framework.id} className="space-y-3">
-                      <button
-                        onClick={() => setSelectedFramework(isOpen ? null : framework.id)}
-                        className="w-full text-left"
-                      >
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-2xl font-bold text-gray-900 flex-shrink-0">{framework.id}</span>
-                          <div className={`h-1.5 flex-1 rounded-full bg-gradient-to-r ${framework.accent}`}></div>
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 ml-0">{framework.title}</h3>
-                        <p className="text-sm font-semibold text-gray-700">{framework.subtitle}</p>
-                        <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all">
-                          View more
-                        </div>
-                      </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {sampleFrameworks.map(framework => (
+                      <div key={framework.id} className="space-y-3">
+                        <button
+                          onClick={() => setSelectedFramework(framework.id)}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-2xl font-bold text-gray-900 flex-shrink-0">{framework.id}</span>
+                            <div className={`h-1.5 flex-1 rounded-full bg-gradient-to-r ${framework.accent}`}></div>
+                          </div>
+                          <h3 className="text-xl font-bold text-gray-900 ml-0">{framework.title}</h3>
+                          <p className="text-sm font-semibold text-gray-700">{framework.subtitle}</p>
+                          <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all">
+                            View more
+                          </div>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Selected Framework Full View */}
+                  {(() => {
+                    const framework = sampleFrameworks.find(f => f.id === selectedFramework)
+                    if (!framework) return null
 
-                      {isOpen && (
-                        <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-sm text-indigo-900 space-y-2">
-                          {framework.detailLines ? (
-                            framework.detailLines.map(line => (
-                              <div key={line.label}>
-                                <span className="font-bold">{line.label}:</span> {line.text}
-                              </div>
-                            ))
-                          ) : (
-                            framework.detail
-                          )}
+                    return (
+                      <div className="space-y-6">
+                        {/* Back Button */}
+                        <button
+                          onClick={() => setSelectedFramework(null)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                          Back to all frameworks
+                        </button>
+
+                        {/* Framework Header */}
+                        <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg p-6">
+                          <div className="flex items-center gap-3 mb-4">
+                            <span className="text-3xl font-bold text-gray-900">{framework.id}</span>
+                            <div className={`h-2 flex-1 rounded-full bg-gradient-to-r ${framework.accent}`}></div>
+                          </div>
+                          <h2 className="text-3xl font-bold text-gray-900 mb-2">{framework.title}</h2>
+                          <p className="text-lg font-semibold text-gray-700 mb-6">{framework.subtitle}</p>
+
+                          {/* Framework explanation */}
+                          <div className="rounded-xl bg-indigo-50 border border-indigo-100 p-5 text-sm text-indigo-900 space-y-3">
+                            {framework.detailLines ? (
+                              framework.detailLines.map(line => (
+                                <div key={line.label} className="flex gap-2">
+                                  <span className="font-bold text-indigo-700">{line.label}:</span>
+                                  <span>{line.text}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <p>{framework.detail}</p>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+
+                        {/* Questions and Answers */}
+                        {framework.questions && framework.questions.length > 0 && (
+                          <div className="bg-white rounded-2xl border-2 border-gray-200 shadow-lg overflow-hidden">
+                            <div className={`bg-gradient-to-r ${framework.accent} px-6 py-4`}>
+                              <h3 className="font-bold text-white text-xl">
+                                Sample Questions & Answers
+                              </h3>
+                              <p className="text-white/90 text-sm mt-1">
+                                {framework.questions.length} questions to practice
+                              </p>
+                            </div>
+
+                            <div className="p-6 space-y-5">
+                              {framework.questions.map((qa) => (
+                                <div
+                                  key={qa.id}
+                                  className="border-2 border-gray-200 rounded-xl p-5 hover:shadow-lg transition-all bg-gradient-to-br from-gray-50 to-white"
+                                >
+                                  <div className="flex items-start gap-3 mb-4">
+                                    <span className={`flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r ${framework.accent} text-white flex items-center justify-center text-sm font-bold shadow-md`}>
+                                      {qa.id}
+                                    </span>
+                                    <h4 className="font-bold text-gray-900 text-base flex-1 leading-relaxed">
+                                      {qa.question}
+                                    </h4>
+                                  </div>
+
+                                  <div className="ml-11 space-y-3">
+                                    <p className="text-sm font-bold text-indigo-600 mb-3">
+                                      Answer ({framework.title}):
+                                    </p>
+
+                                    {qa.answer.S && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-emerald-600">S:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.S}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.T && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-blue-600">T:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.T}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.A && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-purple-600">A:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.A}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.R && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-orange-600">R:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.R}</span>
+                                      </div>
+                                    )}
+
+                                    {/* Add support for other framework formats */}
+                                    {qa.answer.O && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-amber-600">O:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.O}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.P && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-rose-600">P:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.P}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.E && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-cyan-600">E:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.E}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </>
+              )}
             </>
           )}
         </div>
@@ -469,11 +599,25 @@ export default function Resources() {
 
             {/* PDF Viewer */}
             <div className="flex-1 overflow-hidden min-h-0">
-              <iframe
-                src={`/resources/${encodeURIComponent(selectedResource.filename)}#toolbar=0&navpanes=0&view=FitH`}
+              <object
+                data={`/resources/${encodeURIComponent(selectedResource.filename)}#toolbar=0&navpanes=0&view=FitH`}
+                type="application/pdf"
                 className="w-full h-full"
                 title={selectedResource.title}
-              />
+              >
+                <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                  <FileText className="w-20 h-20 text-gray-400 mb-4" />
+                  <p className="text-gray-700 mb-4">Unable to display PDF in browser.</p>
+                  <a
+                    href={`/resources/${encodeURIComponent(selectedResource.filename)}`}
+                    download={selectedResource.filename}
+                    className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg"
+                  >
+                    <FileText className="w-5 h-5" />
+                    Download PDF
+                  </a>
+                </div>
+              </object>
             </div>
           </div>
         </div>

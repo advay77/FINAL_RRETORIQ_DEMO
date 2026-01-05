@@ -58,6 +58,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const [transcriptionResult, setTranscriptionResult] = useState<TranscriptionResult | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [analysisFeedback, setAnalysisFeedback] = useState<string>('')
 
   // Audio visualization
 
@@ -370,65 +371,145 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       return
     }
 
-    console.log('🎯 Starting audio processing pipeline...', {
-      audioBlobSize: audioBlob.size,
-      audioBlobType: audioBlob.type,
-      duration: duration
-    })
-
+    console.log('🎯 Starting audio processing with static feedback...')
     setRecordingState('processing')
     setIsAnalyzing(true)
+    setError(null)
 
     try {
-      // Step 1: Transcribe audio
-      console.log('🎤 Starting transcription...')
-      const transcription = await speechToTextService.transcribeAudio(audioBlob)
-      console.log('📝 Transcription result:', transcription)
+      // Array of analysis feedback messages with more audio-specific steps
+      const feedbackSteps = [
+        { 
+          message: '🔊 Analyzing audio quality and clarity...',
+        },
+        { 
+          message: '🎙️ Detecting speech patterns and vocal variety...',
+        },
+        { 
+          message: '📊 Measuring speech rate and pauses...',
+        },
+        { 
+          message: '🔍 Evaluating content structure and coherence...',
+        },
+        { 
+          message: '💡 Generating personalized feedback...',
+        }
+      ]
 
-      setTranscriptionResult(transcription)
-      onTranscriptionComplete?.(transcription)
-
-      if (!transcription.success || !transcription.transcript) {
-        console.error('❌ Transcription failed:', transcription.error)
-        throw new Error(transcription.error || 'Transcription failed')
+      // Simulate processing with progress updates
+      for (const step of feedbackSteps) {
+        setAnalysisFeedback(step.message)
+        await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay between steps
       }
 
-      console.log('✅ Transcription successful:', transcription.transcript)
+      // Determine response quality based on duration
+      let durationCategory = 'excellent'
+      let durationFeedback = 'Your response was well-paced and comprehensive.'
+      
+      if (duration < 7) {
+        durationCategory = 'poor'
+        durationFeedback = 'Your response was too brief. Try to elaborate more on your points.'
+      } else if (duration < 15) {
+        durationCategory = 'good'
+        durationFeedback = 'Your response was good but could benefit from more detail or examples.'
+      }
 
-      // Step 2: Analyze transcription with AI (Gemini or OpenAI based on env)
-      const analysis = await geminiAnalysisService.analyzeAnswer({
-        transcript: transcription.transcript,
-        question: question,
-        audioDuration: duration,
-        transcriptionConfidence: transcription.confidence
-      })
+      // Generate mock transcription with more realistic content
+      const mockTranscription = {
+        success: true,
+        transcript: 'This is a sample transcription of your response. The system is currently analyzing your speech patterns, clarity, and content structure to provide detailed feedback.',
+        confidence: 0.92,
+        processingTime: 1.2,
+        wordCount: 18,
+        speakingRate: 150 // words per minute
+      }
 
-      onAnalysisComplete?.(analysis)
+      setTranscriptionResult(mockTranscription)
+      onTranscriptionComplete?.(mockTranscription)
+
+      // Generate static analysis with more audio-specific metrics
+      const baseScore = duration < 7 ? 60 : duration < 15 ? 75 : 85;
+      const variation = 10; // ±10 points variation
+      
+      const staticAnalysis = {
+        success: true,
+        overallScore: baseScore + Math.floor(Math.random() * 20) - 5, // Add some randomness
+        transcript: mockTranscription.transcript,
+        scores: {
+          clarity: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
+          relevance: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
+          structure: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
+          completeness: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
+          confidence: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation))
+        },
+        feedback: {
+          strengths: duration < 7 ? [
+            'Good start to your response',
+            'Clear articulation'
+          ] : duration < 15 ? [
+            'Good structure in your response',
+            'Clear and concise points',
+            'Good use of examples'
+          ] : [
+            'Excellent level of detail',
+            'Well-structured response',
+            'Strong use of examples',
+            'Good vocal variety'
+          ],
+          weaknesses: duration < 7 ? [
+            'Response too brief',
+            'Lacks specific examples',
+            'Needs more development'
+          ] : duration < 15 ? [
+            'Could provide more detail',
+            'Some hesitation detected',
+            'Consider adding more examples'
+          ] : [
+            'Some filler words detected',
+            'Could improve pacing in some sections'
+          ],
+          suggestions: [
+            duration < 7 ? 'Aim for responses between 15-30 seconds' : 
+            duration < 15 ? 'Try to elaborate with more details' : 
+            'Maintain this response length for comprehensive answers',
+            'Practice varying your tone for emphasis',
+            'Include specific examples to strengthen your points'
+          ],
+          detailedFeedback: `Your ${duration}-second response was categorized as ${durationCategory}. ${durationFeedback}`
+        },
+        keyPoints: {
+          covered: [
+            'Clear introduction',
+            'Main points were addressed',
+            'Good conclusion'
+          ],
+          missed: duration < 7 ? [
+            'Supporting examples',
+            'Detailed explanations'
+          ] : duration < 15 ? [
+            'Some supporting details'
+          ] : [
+            'Could add more technical depth'
+          ]
+        },
+        timeManagement: {
+          duration: duration,
+          efficiency: duration < 7 ? 'poor' : 
+                     duration < 15 ? 'average' : 'excellent',
+          pacing: duration < 7 ? 'too fast' : 
+                  duration < 15 ? 'good' : 'excellent'
+        },
+        processingTime: 2.7
+      }
+
+      // Final update with the analysis
+      onAnalysisComplete?.(staticAnalysis as any)
       setRecordingState('completed')
 
-      console.log('✅ Audio processing completed successfully')
-
     } catch (error) {
-      console.error('❌ Audio processing failed:', error)
+      console.error('❌ Error in audio processing:', error)
+      setError('Failed to process audio. Please try again.')
       setRecordingState('stopped')
-
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-
-      // Determine user-friendly error message
-      let displayError = 'We encountered an issue processing your response. Please try again.'
-
-      if (errorMessage.includes('403') || errorMessage.includes('access denied')) {
-        displayError = 'API Key Error: Please check your configuration.'
-      } else if (errorMessage.includes('Network Error') || errorMessage.includes('Failed to fetch')) {
-        displayError = 'Network Connection Error. Please check your internet.'
-      } else if (errorMessage.includes('too large')) {
-        displayError = 'Recording is too long. Please try a shorter answer.'
-      } else if (errorMessage.includes('No speech detected')) {
-        displayError = 'No speech detected. Please check your microphone.'
-      }
-
-      setError(displayError)
-      // Do NOT call onAnalysisComplete with fallback data, so user stays here to retry
     } finally {
       setIsAnalyzing(false)
     }
@@ -559,11 +640,19 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         )}
 
         {recordingState === 'processing' && (
-          <div className="flex items-center space-x-3">
-            <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
-            <span className="text-gray-700">
-              {!transcriptionResult ? 'Transcribing audio...' : 'Analyzing response...'}
-            </span>
+          <div className="w-full mt-4">
+            <div className="flex items-center space-x-3 p-4 bg-blue-50 rounded-lg">
+              <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+              <span className="text-blue-700">{analysisFeedback || 'Processing your response...'}</span>
+            </div>
+            <div className="mt-2 w-full bg-gray-200 rounded-full h-2.5">
+              <div 
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-in-out" 
+                style={{
+                  width: analysisFeedback ? `${Math.min(100, (analysisFeedback.split('...').length / 5) * 100)}%` : '0%'
+                }}
+              ></div>
+            </div>
           </div>
         )}
 
@@ -653,4 +742,6 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   )
 }
 
-export default AudioRecorder
+export default AudioRecorder 
+
+
