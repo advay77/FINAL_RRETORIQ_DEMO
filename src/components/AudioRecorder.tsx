@@ -21,15 +21,12 @@ import {
   XCircle,
   Clock,
 } from 'lucide-react'
-import { speechToTextService, type TranscriptionResult } from '../services/speechToTextService'
-import { geminiAnalysisService, type AnswerAnalysis, type InterviewQuestion } from '../services/geminiAnalysisService'
-// Alternative: import { openAIAnalysisService, type AnswerAnalysis, type InterviewQuestion } from '../services/openAIAnalysisService'
-
-// AI provider selection is available via env when needed; currently we import services directly where used.
+import type { TranscriptionResult } from '../services/speechToTextService'
+import type { AnswerAnalysis, InterviewQuestion } from '../services/openAIAnalysisService'
 
 interface AudioRecorderProps {
   question: InterviewQuestion
-  onAnalysisComplete?: (analysis: AnswerAnalysis) => void
+  onAnalysisComplete?: (analysis: AnswerAnalysis) => void | Promise<void>
   onTranscriptionComplete?: (result: TranscriptionResult) => void
   maxDuration?: number // in seconds, default 300 (5 minutes)
   autoStop?: boolean // auto-stop when max duration reached
