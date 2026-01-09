@@ -68,6 +68,11 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const animationRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const audioLevelRef = useRef<{ maxRms: number; sumRms: number; frames: number }>({
+    maxRms: 0,
+    sumRms: 0,
+    frames: 0
+  })
 
   // Cleanup on unmount
   useEffect(() => {
@@ -160,6 +165,12 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         }
         const rms = Math.sqrt(sumSquares / bufferLength)
 
+        audioLevelRef.current.sumRms += rms
+        audioLevelRef.current.frames += 1
+        if (rms > audioLevelRef.current.maxRms) {
+          audioLevelRef.current.maxRms = rms
+        }
+
         // Boost the signal a bit to make it look good
         const amplifiedVolume = Math.min(rms * 4, 1) // Cap at 1.0
 
@@ -225,6 +236,8 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     if (!stream) return
 
     try {
+      audioLevelRef.current = { maxRms: 0, sumRms: 0, frames: 0 }
+
       // Check supported MIME types and choose the best one
       let mimeType = 'audio/webm;codecs=opus'
       if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -356,6 +369,9 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     setTranscriptionResult(null)
     setIsAnalyzing(false)
     setError(null)
+    setAnalysisFeedback('')
+
+    audioLevelRef.current = { maxRms: 0, sumRms: 0, frames: 0 }
 
   }
 
@@ -374,8 +390,19 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     setError(null)
 
     try {
-      const noVoiceDetected = duration <= 0 || duration < 3 || audioBlob.size < 2000
-      const isExtendedFeedback = !noVoiceDetected && duration >= 5
+      const bytesPerSecond = duration > 0 ? audioBlob.size / duration : 0
+      const avgRms = audioLevelRef.current.frames > 0
+        ? audioLevelRef.current.sumRms / audioLevelRef.current.frames
+        : 0
+      const maxRms = audioLevelRef.current.maxRms
+
+      const noVoiceDetected =
+        duration <= 0 ||
+        audioBlob.size < 2000 ||
+        bytesPerSecond < 300 ||
+        (audioLevelRef.current.frames > 0 && maxRms < 0.02 && avgRms < 0.01)
+      const tooShort = duration > 0 && duration < 3
+      const isExtendedFeedback = !noVoiceDetected && !tooShort && duration >= 5
 
       const shortFeedbackSteps = [
         { message: '🔊 Analyzing audio quality and clarity...' },
@@ -425,7 +452,10 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
       if (noVoiceDetected) {
         durationCategory = 'poor'
-        durationFeedback = 'No clear speech was detected (or the recording was too short). Please speak closer to the microphone and record at least 10–15 seconds.'
+        durationFeedback = 'No voice was detected. This response cannot be evaluated and is rated VERY BAD. Please re-record with clear speech.'
+      } else if (tooShort) {
+        durationCategory = 'poor'
+        durationFeedback = 'Your response was too short to evaluate. Try recording at least 8–10 seconds and include one example.'
       } else if (duration < 7) {
         durationCategory = 'poor'
         durationFeedback = 'Your response was too brief. Try to elaborate more on your points.'
@@ -449,23 +479,29 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       onTranscriptionComplete?.(mockTranscription)
 
       // Generate static analysis with more audio-specific metrics
-      const baseScore = noVoiceDetected ? 35 : duration < 7 ? 55 : duration < 15 ? 75 : 85
-      const variation = 10; // ±10 points variation
+      const baseScore = noVoiceDetected ? 10 : tooShort ? 45 : duration < 7 ? 55 : duration < 15 ? 75 : 85
+      const variation = noVoiceDetected ? 0 : 10 // keep no-voice stable at minimum
       
       const staticAnalysis = {
         success: true,
-        overallScore: baseScore + Math.floor(Math.random() * 20) - 5, // Add some randomness
+        overallScore: noVoiceDetected
+          ? 10
+          : baseScore + Math.floor(Math.random() * 20) - 5, // Add some randomness
         transcript: mockTranscription.transcript,
         scores: {
-          clarity: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
-          relevance: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
-          structure: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
-          completeness: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
-          confidence: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation))
+          clarity: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
+          relevance: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
+          structure: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
+          completeness: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
+          confidence: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation))
         },
         feedback: {
           strengths: noVoiceDetected
-            ? ['You successfully started the recording']
+            ? [
+            'VERY BAD: No voice detected — no strengths can be evaluated',
+            'No clear answer was delivered',
+            'No evidence of clarity, structure, relevance, or confidence'
+          ]
             : duration < 7 ? [
             'Good start to your response',
             'Clear articulation in parts of the answer',
@@ -474,8 +510,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
           ] : duration < 15 ? [
             'Good structure in your response',
             'Clear and concise points',
-            'Good use of examples'
-            ,
+            'Good use of examples',
             'Decent pacing overall',
             'Answer stays mostly on-topic'
           ] : [
@@ -487,7 +522,11 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             'Strong conclusion that summarizes the answer'
           ],
           weaknesses: noVoiceDetected
-            ? ['No speech detected (or audio was too quiet)', 'Recording too short to analyze', 'Check microphone permissions / input device']
+            ? [
+            'VERY BAD: No voice detected (silent / extremely low input)',
+            'Cannot analyze content, structure, clarity, or relevance without speech',
+            'Microphone input may be muted, blocked, or too far from your mouth'
+          ]
             : duration < 7 ? [
             'Response too brief',
             'Not enough supporting detail',
@@ -504,7 +543,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
             'A few sentences could be more concise'
           ],
           suggestions: [
-            noVoiceDetected ? 'Re-record and speak clearly for at least 10–15 seconds' :
+            noVoiceDetected ? 'Re-record now: speak clearly and loudly for at least 10–15 seconds' :
             duration < 7 ? 'Aim for responses between 15-30 seconds' : 
             duration < 15 ? 'Try to elaborate with more details' : 
             'Maintain this response length for comprehensive answers',
@@ -516,14 +555,21 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
           detailedFeedback: `Your ${duration}-second response was categorized as ${durationCategory}. ${durationFeedback}`
         },
         keyPoints: {
-          covered: [
+          covered: noVoiceDetected
+            ? []
+            : [
             'Clear introduction',
             'Main points were addressed',
             'Good conclusion',
             'Attempted to include supporting reasoning'
           ],
           missed: noVoiceDetected
-            ? ['Could not assess key points because no speech was detected']
+            ? [
+            'VERY BAD: No voice detected, so no key points could be evaluated',
+            'Missing: a clear spoken answer to the question',
+            'Missing: supporting details and examples',
+            'Missing: structured explanation and conclusion'
+          ]
             : duration < 7 ? [
             'Supporting examples',
             'Detailed explanations',
