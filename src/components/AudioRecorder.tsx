@@ -374,36 +374,59 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     setError(null)
 
     try {
-      // Array of analysis feedback messages with more audio-specific steps
-      const feedbackSteps = [
-        { 
-          message: '🔊 Analyzing audio quality and clarity...',
-        },
-        { 
-          message: '🎙️ Detecting speech patterns and vocal variety...',
-        },
-        { 
-          message: '📊 Measuring speech rate and pauses...',
-        },
-        { 
-          message: '🔍 Evaluating content structure and coherence...',
-        },
-        { 
-          message: '💡 Generating personalized feedback...',
-        }
+      const noVoiceDetected = duration <= 0 || duration < 3 || audioBlob.size < 2000
+      const isExtendedFeedback = !noVoiceDetected && duration >= 5
+
+      const shortFeedbackSteps = [
+        { message: '🔊 Analyzing audio quality and clarity...' },
+        { message: '🎙️ Detecting speech patterns and vocal variety...' },
+        { message: '📊 Measuring speech rate and pauses...' },
+        { message: '🔍 Evaluating content structure and coherence...' },
+        { message: '💡 Generating personalized feedback...' }
       ]
+
+      const extendedFeedbackSteps = [
+        { message: '🔊 Checking input signal and background noise...' },
+        { message: '🎧 Estimating volume consistency across the recording...' },
+        { message: '🧹 Detecting silent segments and long pauses...' },
+        { message: '🎙️ Measuring articulation and pronunciation clarity...' },
+        { message: '🗣️ Estimating speaking rate (WPM) from timing...' },
+        { message: '⏱️ Checking pacing and rhythm across sentences...' },
+        { message: '📣 Checking confidence indicators in delivery...' },
+        { message: '🔁 Detecting repeated words and filler terms...' },
+        { message: '🧠 Identifying main idea and supporting points...' },
+        { message: '🧩 Checking structure: intro → body → conclusion...' },
+        { message: '🎯 Measuring relevance to the question prompt...' },
+        { message: '📌 Extracting key points that were clearly addressed...' },
+        { message: '🧾 Detecting missing examples / missing detail...' },
+        { message: '🗂️ Checking logical flow and transitions...' },
+        { message: '✅ Checking completeness of the response...' },
+        { message: '🧭 Checking time usage vs expected duration...' },
+        { message: '📈 Scoring clarity, relevance, structure, completeness...' },
+        { message: '📝 Drafting strengths and improvement areas...' },
+        { message: '💡 Generating actionable suggestions...' },
+        { message: '✨ Finalizing your feedback summary...' }
+      ]
+
+      const feedbackSteps = isExtendedFeedback ? extendedFeedbackSteps : shortFeedbackSteps
+      const stepDelayMs = isExtendedFeedback ? 350 : 1000
 
       // Simulate processing with progress updates
       for (const step of feedbackSteps) {
         setAnalysisFeedback(step.message)
-        await new Promise(resolve => setTimeout(resolve, 1000)) // 1 second delay between steps
+        await new Promise(resolve => setTimeout(resolve, stepDelayMs))
       }
+
+      setAnalysisFeedback('✅ Analysis complete!')
 
       // Determine response quality based on duration
       let durationCategory = 'excellent'
       let durationFeedback = 'Your response was well-paced and comprehensive.'
-      
-      if (duration < 7) {
+
+      if (noVoiceDetected) {
+        durationCategory = 'poor'
+        durationFeedback = 'No clear speech was detected (or the recording was too short). Please speak closer to the microphone and record at least 10–15 seconds.'
+      } else if (duration < 7) {
         durationCategory = 'poor'
         durationFeedback = 'Your response was too brief. Try to elaborate more on your points.'
       } else if (duration < 15) {
@@ -412,20 +435,21 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       }
 
       // Generate mock transcription with more realistic content
-      const mockTranscription = {
-        success: true,
-        transcript: 'This is a sample transcription of your response. The system is currently analyzing your speech patterns, clarity, and content structure to provide detailed feedback.',
-        confidence: 0.92,
+      const mockTranscription: TranscriptionResult = {
+        success: !noVoiceDetected,
+        transcript: noVoiceDetected
+          ? ''
+          : 'This is a sample transcription of your response. The system is currently analyzing your speech patterns, clarity, and content structure to provide detailed feedback.',
+        confidence: noVoiceDetected ? 0 : 0.92,
         processingTime: 1.2,
-        wordCount: 18,
-        speakingRate: 150 // words per minute
+        error: noVoiceDetected ? 'No speech detected' : undefined
       }
 
       setTranscriptionResult(mockTranscription)
       onTranscriptionComplete?.(mockTranscription)
 
       // Generate static analysis with more audio-specific metrics
-      const baseScore = duration < 7 ? 60 : duration < 15 ? 75 : 85;
+      const baseScore = noVoiceDetected ? 35 : duration < 7 ? 55 : duration < 15 ? 75 : 85
       const variation = 10; // ±10 points variation
       
       const staticAnalysis = {
@@ -440,37 +464,54 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
           confidence: Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation))
         },
         feedback: {
-          strengths: duration < 7 ? [
+          strengths: noVoiceDetected
+            ? ['You successfully started the recording']
+            : duration < 7 ? [
             'Good start to your response',
-            'Clear articulation'
+            'Clear articulation in parts of the answer',
+            'You attempted to answer the question directly',
+            'Good effort under time pressure'
           ] : duration < 15 ? [
             'Good structure in your response',
             'Clear and concise points',
             'Good use of examples'
+            ,
+            'Decent pacing overall',
+            'Answer stays mostly on-topic'
           ] : [
             'Excellent level of detail',
             'Well-structured response',
             'Strong use of examples',
-            'Good vocal variety'
+            'Good vocal variety',
+            'Clear transitions between points',
+            'Strong conclusion that summarizes the answer'
           ],
-          weaknesses: duration < 7 ? [
+          weaknesses: noVoiceDetected
+            ? ['No speech detected (or audio was too quiet)', 'Recording too short to analyze', 'Check microphone permissions / input device']
+            : duration < 7 ? [
             'Response too brief',
-            'Lacks specific examples',
-            'Needs more development'
+            'Not enough supporting detail',
+            'Examples were missing or unclear',
+            'Some points felt incomplete'
           ] : duration < 15 ? [
             'Could provide more detail',
             'Some hesitation detected',
-            'Consider adding more examples'
+            'Consider adding more examples',
+            'Transitions between points can be smoother'
           ] : [
             'Some filler words detected',
-            'Could improve pacing in some sections'
+            'Could improve pacing in some sections',
+            'A few sentences could be more concise'
           ],
           suggestions: [
+            noVoiceDetected ? 'Re-record and speak clearly for at least 10–15 seconds' :
             duration < 7 ? 'Aim for responses between 15-30 seconds' : 
             duration < 15 ? 'Try to elaborate with more details' : 
             'Maintain this response length for comprehensive answers',
             'Practice varying your tone for emphasis',
-            'Include specific examples to strengthen your points'
+            'Include specific examples to strengthen your points',
+            'Use a simple structure: 1) Answer 2) Reason 3) Example 4) Summary',
+            'Reduce filler words by pausing briefly instead'
           ],
           detailedFeedback: `Your ${duration}-second response was categorized as ${durationCategory}. ${durationFeedback}`
         },
@@ -478,22 +519,28 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
           covered: [
             'Clear introduction',
             'Main points were addressed',
-            'Good conclusion'
+            'Good conclusion',
+            'Attempted to include supporting reasoning'
           ],
-          missed: duration < 7 ? [
+          missed: noVoiceDetected
+            ? ['Could not assess key points because no speech was detected']
+            : duration < 7 ? [
             'Supporting examples',
-            'Detailed explanations'
+            'Detailed explanations',
+            'Clearer conclusion / takeaway'
           ] : duration < 15 ? [
-            'Some supporting details'
+            'Some supporting details',
+            'Stronger example to prove your point'
           ] : [
-            'Could add more technical depth'
+            'Could add more technical depth',
+            'Could mention trade-offs or alternatives'
           ]
         },
         timeManagement: {
           duration: duration,
-          efficiency: duration < 7 ? 'poor' : 
+          efficiency: noVoiceDetected ? 'poor' : duration < 7 ? 'poor' : 
                      duration < 15 ? 'average' : 'excellent',
-          pacing: duration < 7 ? 'too fast' : 
+          pacing: noVoiceDetected ? 'no speech detected' : duration < 7 ? 'too fast' : 
                   duration < 15 ? 'good' : 'excellent'
         },
         processingTime: 2.7
