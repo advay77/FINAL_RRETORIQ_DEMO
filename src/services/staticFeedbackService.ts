@@ -5,8 +5,6 @@
  * No AI/API calls - purely rule-based feedback generation
  */
 
-/* Code here */
-
 import type { AnswerAnalysis } from './geminiAnalysisService'
 
 interface AudioMetrics {
