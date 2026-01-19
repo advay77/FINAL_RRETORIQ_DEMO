@@ -13,7 +13,7 @@
 
 // API Configuration
 const API_PROXY_BASE = import.meta.env.VITE_API_PROXY_BASE || (typeof window !== 'undefined' && window.location && window.location.hostname.includes('rretoriq25.web.app') ? 'https://rretoriq-backend-api.vercel.app/api' : '/api')
-const WHISPER_PROXY_URL = `${API_PROXY_BASE}/whisper-proxy`
+const GEMINI_TRANSCRIBE_PROXY_URL = `${API_PROXY_BASE}/gemini-transcribe`
 // Proxy will handle retries and rate limiting server-side if needed
 
 // Supported languages
@@ -82,7 +82,6 @@ class SpeechToTextService {
     const startTime = Date.now()
     const {
       language = 'en',
-      temperature = 0.2
     } = options
 
     try {
@@ -92,55 +91,46 @@ class SpeechToTextService {
       // Create form data
       const formData = new FormData()
       formData.append('file', audioFile)
-      formData.append('model', 'whisper-1')
 
       // Set language (use 'auto' for automatic detection)
       if (language !== 'auto') {
         formData.append('language', language)
       }
 
-      formData.append('temperature', temperature.toString())
-      formData.append('response_format', 'verbose_json') // Get detailed response with confidence
-
-      console.log('🎤 Sending to OpenAI Whisper API...', {
-        model: 'whisper-1',
+      console.log('🎤 Sending to Gemini transcription proxy...', {
         language: language === 'auto' ? 'auto-detect' : language,
         fileSize: `${(audioFile.size / 1024).toFixed(2)} KB`
       })
 
       // Upload to server-side whisper proxy (server holds OpenAI key)
-      const response = await fetch(WHISPER_PROXY_URL, {
+      const response = await fetch(GEMINI_TRANSCRIBE_PROXY_URL, {
         method: 'POST',
         body: formData
       })
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-        console.error('❌ Whisper API Error:', {
+        console.error('❌ Gemini Transcription Error:', {
           status: response.status,
-          error: errorData.error
+          error: errorData.error || errorData
         })
 
         // Provide specific error messages
-        if (response.status === 401) {
-          throw new Error('Invalid OpenAI API key. Please check your VITE_OPENAI_API_KEY in .env file')
-        } else if (response.status === 413) {
+        if (response.status === 413) {
           throw new Error('Audio file too large. Please record a shorter response (max 25MB)')
         } else if (response.status === 429) {
           throw new Error('Rate limit exceeded. Please wait a moment and try again')
         }
 
-        throw new Error(`Whisper API error: ${errorData.error?.message || response.statusText}`)
+        throw new Error(`Gemini transcription error: ${errorData.error?.message || errorData.error || response.statusText}`)
       }
 
       const data = await response.json()
       const processingTime = Date.now() - startTime
 
-      console.log('📊 Whisper API response:', {
+      console.log('📊 Gemini transcription response:', {
         hasText: !!data.text,
         textLength: data.text?.length || 0,
-        language: data.language,
-        duration: data.duration,
         processingTime: `${processingTime}ms`
       })
 
@@ -160,14 +150,12 @@ class SpeechToTextService {
 
       // Estimate confidence (Whisper doesn't provide direct confidence scores)
       // Use word count and duration as proxy
-      const estimatedConfidence = this.estimateConfidence(wordCount, data.duration)
+      const estimatedConfidence = this.estimateConfidence(wordCount)
 
       console.log('✅ Transcription successful:', {
         transcript: transcript.substring(0, 100) + (transcript.length > 100 ? '...' : ''),
         wordCount,
-        language: data.language,
         confidence: estimatedConfidence,
-        duration: `${data.duration?.toFixed(1)}s`
       })
 
       return {
@@ -175,9 +163,7 @@ class SpeechToTextService {
         confidence: estimatedConfidence,
         success: true,
         processingTime,
-        language: data.language,
-        wordCount,
-        duration: data.duration
+        wordCount
       }
 
     } catch (error) {

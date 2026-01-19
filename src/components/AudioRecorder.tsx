@@ -21,8 +21,9 @@ import {
   XCircle,
   Clock,
 } from 'lucide-react'
-import type { TranscriptionResult } from '../services/speechToTextService'
-import type { AnswerAnalysis, InterviewQuestion } from '../services/openAIAnalysisService'
+import { speechToTextService, type TranscriptionResult } from '../services/speechToTextService'
+import { type AnswerAnalysis, type InterviewQuestion } from '../services/geminiAnalysisService'
+import { staticFeedbackService } from '../services/staticFeedbackService'
 
 interface AudioRecorderProps {
   question: InterviewQuestion
@@ -65,7 +66,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const animationRef = useRef<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const audioLevelRef = useRef<{ maxRms: number; sumRms: number; frames: number }>({
@@ -384,220 +385,57 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       return
     }
 
-    console.log('🎯 Starting audio processing with static feedback...')
+    console.log('🎯 Starting audio processing pipeline...')
     setRecordingState('processing')
     setIsAnalyzing(true)
     setError(null)
 
     try {
-      const bytesPerSecond = duration > 0 ? audioBlob.size / duration : 0
-      const avgRms = audioLevelRef.current.frames > 0
-        ? audioLevelRef.current.sumRms / audioLevelRef.current.frames
-        : 0
-      const maxRms = audioLevelRef.current.maxRms
+      // Step 1: Try to transcribe (optional - won't fail if this fails)
+      setAnalysisFeedback('🎤 Transcribing your audio...')
+      let transcriptText = ''
 
-      const noVoiceDetected =
-        duration <= 0 ||
-        audioBlob.size < 2000 ||
-        bytesPerSecond < 300 ||
-        (audioLevelRef.current.frames > 0 && maxRms < 0.02 && avgRms < 0.01)
-      const tooShort = duration > 0 && duration < 3
-      const isExtendedFeedback = !noVoiceDetected && !tooShort && duration >= 5
+      try {
+        const transcription = await speechToTextService.transcribeAudio(audioBlob)
+        setTranscriptionResult(transcription)
+        onTranscriptionComplete?.(transcription)
 
-      const shortFeedbackSteps = [
-        { message: '🔊 Analyzing audio quality and clarity...' },
-        { message: '🎙️ Detecting speech patterns and vocal variety...' },
-        { message: '📊 Measuring speech rate and pauses...' },
-        { message: '🔍 Evaluating content structure and coherence...' },
-        { message: '💡 Generating personalized feedback...' }
-      ]
-
-      const extendedFeedbackSteps = [
-        { message: '🔊 Checking input signal and background noise...' },
-        { message: '🎧 Estimating volume consistency across the recording...' },
-        { message: '🧹 Detecting silent segments and long pauses...' },
-        { message: '🎙️ Measuring articulation and pronunciation clarity...' },
-        { message: '🗣️ Estimating speaking rate (WPM) from timing...' },
-        { message: '⏱️ Checking pacing and rhythm across sentences...' },
-        { message: '📣 Checking confidence indicators in delivery...' },
-        { message: '🔁 Detecting repeated words and filler terms...' },
-        { message: '🧠 Identifying main idea and supporting points...' },
-        { message: '🧩 Checking structure: intro → body → conclusion...' },
-        { message: '🎯 Measuring relevance to the question prompt...' },
-        { message: '📌 Extracting key points that were clearly addressed...' },
-        { message: '🧾 Detecting missing examples / missing detail...' },
-        { message: '🗂️ Checking logical flow and transitions...' },
-        { message: '✅ Checking completeness of the response...' },
-        { message: '🧭 Checking time usage vs expected duration...' },
-        { message: '📈 Scoring clarity, relevance, structure, completeness...' },
-        { message: '📝 Drafting strengths and improvement areas...' },
-        { message: '💡 Generating actionable suggestions...' },
-        { message: '✨ Finalizing your feedback summary...' }
-      ]
-
-      const feedbackSteps = isExtendedFeedback ? extendedFeedbackSteps : shortFeedbackSteps
-      const stepDelayMs = isExtendedFeedback ? 350 : 1000
-
-      // Simulate processing with progress updates
-      for (const step of feedbackSteps) {
-        setAnalysisFeedback(step.message)
-        await new Promise(resolve => setTimeout(resolve, stepDelayMs))
+        if (transcription.success && transcription.transcript) {
+          transcriptText = transcription.transcript
+          console.log('✅ Transcription successful:', transcriptText.substring(0, 50) + '...')
+        } else {
+          console.warn('⚠️ Transcription failed, continuing with empty transcript')
+        }
+      } catch (transcriptionError) {
+        console.warn('⚠️ Transcription error (continuing anyway):', transcriptionError)
       }
 
+      // Step 2: Analyze audio metrics (works with or without transcript)
+      setAnalysisFeedback('📊 Analyzing your response...')
+      const audioMetrics = staticFeedbackService.analyzeAudioMetrics(
+        audioBlob,
+        duration,
+        transcriptText,
+        audioLevelRef.current
+      )
+
+      // Step 3: Generate static feedback (ALWAYS happens)
+      const analysis = staticFeedbackService.generateFeedback(audioMetrics)
+
+      console.log('✅ Static feedback generated:', {
+        scenario: audioMetrics.hasVoice ? (audioMetrics.duration < 5 ? 'short' : 'good') : 'no-voice',
+        score: analysis.overallScore,
+        duration: audioMetrics.duration,
+        wordCount: audioMetrics.wordCount,
+        hasTranscript: transcriptText.length > 0
+      })
+
+      onAnalysisComplete?.(analysis)
       setAnalysisFeedback('✅ Analysis complete!')
-
-      // Determine response quality based on duration
-      let durationCategory = 'excellent'
-      let durationFeedback = 'Your response was well-paced and comprehensive.'
-
-      if (noVoiceDetected) {
-        durationCategory = 'poor'
-        durationFeedback = 'No voice was detected. This response cannot be evaluated and is rated VERY BAD. Please re-record with clear speech.'
-      } else if (tooShort) {
-        durationCategory = 'poor'
-        durationFeedback = 'Your response was too short to evaluate. Try recording at least 8–10 seconds and include one example.'
-      } else if (duration < 7) {
-        durationCategory = 'poor'
-        durationFeedback = 'Your response was too brief. Try to elaborate more on your points.'
-      } else if (duration < 15) {
-        durationCategory = 'good'
-        durationFeedback = 'Your response was good but could benefit from more detail or examples.'
-      }
-
-      // Generate mock transcription with more realistic content
-      const mockTranscription: TranscriptionResult = {
-        success: !noVoiceDetected,
-        transcript: noVoiceDetected
-          ? ''
-          : 'This is a sample transcription of your response. The system is currently analyzing your speech patterns, clarity, and content structure to provide detailed feedback.',
-        confidence: noVoiceDetected ? 0 : 0.92,
-        processingTime: 1.2,
-        error: noVoiceDetected ? 'No speech detected' : undefined
-      }
-
-      setTranscriptionResult(mockTranscription)
-      onTranscriptionComplete?.(mockTranscription)
-
-      // Generate static analysis with more audio-specific metrics
-      const baseScore = noVoiceDetected ? 10 : tooShort ? 45 : duration < 7 ? 55 : duration < 15 ? 75 : 85
-      const variation = noVoiceDetected ? 0 : 10 // keep no-voice stable at minimum
-      
-      const staticAnalysis = {
-        success: true,
-        overallScore: noVoiceDetected
-          ? 10
-          : baseScore + Math.floor(Math.random() * 20) - 5, // Add some randomness
-        transcript: mockTranscription.transcript,
-        scores: {
-          clarity: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
-          relevance: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
-          structure: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
-          completeness: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation)),
-          confidence: noVoiceDetected ? 10 : Math.max(0, Math.min(100, baseScore + Math.floor(Math.random() * variation * 2) - variation))
-        },
-        feedback: {
-          strengths: noVoiceDetected
-            ? [
-            'VERY BAD: No voice detected — no strengths can be evaluated',
-            'No clear answer was delivered',
-            'No evidence of clarity, structure, relevance, or confidence'
-          ]
-            : duration < 7 ? [
-            'Good start to your response',
-            'Clear articulation in parts of the answer',
-            'You attempted to answer the question directly',
-            'Good effort under time pressure'
-          ] : duration < 15 ? [
-            'Good structure in your response',
-            'Clear and concise points',
-            'Good use of examples',
-            'Decent pacing overall',
-            'Answer stays mostly on-topic'
-          ] : [
-            'Excellent level of detail',
-            'Well-structured response',
-            'Strong use of examples',
-            'Good vocal variety',
-            'Clear transitions between points',
-            'Strong conclusion that summarizes the answer'
-          ],
-          weaknesses: noVoiceDetected
-            ? [
-            'VERY BAD: No voice detected (silent / extremely low input)',
-            'Cannot analyze content, structure, clarity, or relevance without speech',
-            'Microphone input may be muted, blocked, or too far from your mouth'
-          ]
-            : duration < 7 ? [
-            'Response too brief',
-            'Not enough supporting detail',
-            'Examples were missing or unclear',
-            'Some points felt incomplete'
-          ] : duration < 15 ? [
-            'Could provide more detail',
-            'Some hesitation detected',
-            'Consider adding more examples',
-            'Transitions between points can be smoother'
-          ] : [
-            'Some filler words detected',
-            'Could improve pacing in some sections',
-            'A few sentences could be more concise'
-          ],
-          suggestions: [
-            noVoiceDetected ? 'Re-record now: speak clearly and loudly for at least 10–15 seconds' :
-            duration < 7 ? 'Aim for responses between 15-30 seconds' : 
-            duration < 15 ? 'Try to elaborate with more details' : 
-            'Maintain this response length for comprehensive answers',
-            'Practice varying your tone for emphasis',
-            'Include specific examples to strengthen your points',
-            'Use a simple structure: 1) Answer 2) Reason 3) Example 4) Summary',
-            'Reduce filler words by pausing briefly instead'
-          ],
-          detailedFeedback: `Your ${duration}-second response was categorized as ${durationCategory}. ${durationFeedback}`
-        },
-        keyPoints: {
-          covered: noVoiceDetected
-            ? []
-            : [
-            'Clear introduction',
-            'Main points were addressed',
-            'Good conclusion',
-            'Attempted to include supporting reasoning'
-          ],
-          missed: noVoiceDetected
-            ? [
-            'VERY BAD: No voice detected, so no key points could be evaluated',
-            'Missing: a clear spoken answer to the question',
-            'Missing: supporting details and examples',
-            'Missing: structured explanation and conclusion'
-          ]
-            : duration < 7 ? [
-            'Supporting examples',
-            'Detailed explanations',
-            'Clearer conclusion / takeaway'
-          ] : duration < 15 ? [
-            'Some supporting details',
-            'Stronger example to prove your point'
-          ] : [
-            'Could add more technical depth',
-            'Could mention trade-offs or alternatives'
-          ]
-        },
-        timeManagement: {
-          duration: duration,
-          efficiency: noVoiceDetected ? 'poor' : duration < 7 ? 'poor' : 
-                     duration < 15 ? 'average' : 'excellent',
-          pacing: noVoiceDetected ? 'no speech detected' : duration < 7 ? 'too fast' : 
-                  duration < 15 ? 'good' : 'excellent'
-        },
-        processingTime: 2.7
-      }
-
-      // Final update with the analysis
-      onAnalysisComplete?.(staticAnalysis as any)
       setRecordingState('completed')
 
     } catch (error) {
-      console.error('❌ Error in audio processing:', error)
+      console.error('❌ Critical error in audio processing:', error)
       setError('Failed to process audio. Please try again.')
       setRecordingState('stopped')
     } finally {
@@ -736,8 +574,8 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
               <span className="text-blue-700">{analysisFeedback || 'Processing your response...'}</span>
             </div>
             <div className="mt-2 w-full bg-gray-200 rounded-full h-2.5">
-              <div 
-                className="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-in-out" 
+              <div
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-in-out"
                 style={{
                   width: analysisFeedback ? `${Math.min(100, (analysisFeedback.split('...').length / 5) * 100)}%` : '0%'
                 }}
@@ -832,6 +670,6 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   )
 }
 
-export default AudioRecorder 
+export default AudioRecorder
 
 

@@ -29,10 +29,12 @@ if (req.method === "OPTIONS") {
     return res.status(400).json({ error: "Missing 'input' or 'prompt' in request body" });
   }
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY)  {
     console.error("❌ Gemini API key not found");
     return res.status(500).json({ error: "Gemini API key not configured." });
   }
+
+console.log("process.env.GEMINI_API_KEY", process.env.GEMINI_API_KEY)
 
   // Map common model names to actual v1beta model names
   // Gemini 2.0 Flash models use different naming in v1beta

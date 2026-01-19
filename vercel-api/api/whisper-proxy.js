@@ -1,6 +1,12 @@
 const axios = require('axios')
-const multiparty = require('multiparty')
+const { formidable } = require('formidable')
 const FormData = require('form-data')
+
+module.exports.config = {
+  api: {
+    bodyParser: false,
+  },
+}
 
 function setCors(req, res) {
   const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
@@ -27,27 +33,34 @@ module.exports = (req, res) => {
   }
 
   try {
-    const form = new multiparty.Form()
+    const form = formidable({ multiples: false, keepExtensions: true })
+
     form.parse(req, async (err, fields, files) => {
       if (err) {
-        console.error('Multiparty parse error:', err)
+        console.error('Formidable parse error:', err)
         return res.status(400).json({ error: 'Invalid multipart request' })
       }
 
-      const fileField = files.file && files.file[0]
-      if (!fileField) return res.status(400).json({ error: 'Missing file field' })
+      const fileField = files.file
+      const fileObj = Array.isArray(fileField) ? fileField[0] : fileField
+      if (!fileObj) return res.status(400).json({ error: 'Missing file field' })
 
-      const filePath = fileField.path
-      const filename = fileField.originalFilename || 'recording'
+      const filePath = fileObj.filepath
+      const filename = fileObj.originalFilename || 'recording'
       const buffer = require('fs').readFileSync(filePath)
 
       try {
         const fd = new FormData()
         fd.append('file', buffer, { filename })
         fd.append('model', 'whisper-1')
-        if (fields.language && fields.language[0]) fd.append('language', fields.language[0])
-        if (fields.temperature && fields.temperature[0]) fd.append('temperature', fields.temperature[0])
-        if (fields.response_format && fields.response_format[0]) fd.append('response_format', fields.response_format[0])
+
+        const language = Array.isArray(fields.language) ? fields.language[0] : fields.language
+        const temperature = Array.isArray(fields.temperature) ? fields.temperature[0] : fields.temperature
+        const responseFormat = Array.isArray(fields.response_format) ? fields.response_format[0] : fields.response_format
+
+        if (language) fd.append('language', language)
+        if (temperature) fd.append('temperature', temperature)
+        if (responseFormat) fd.append('response_format', responseFormat)
 
         const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', fd, {
           headers: {
