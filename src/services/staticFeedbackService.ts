@@ -1130,7 +1130,7 @@ class StaticFeedbackService {
      * Generate static feedback based on audio metrics
      */
     generateFeedback(metrics: AudioMetrics): AnswerAnalysis {
-        const { duration, hasVoice, transcript, wordCount } = metrics
+        const { duration, hasVoice, transcript } = metrics
 
         // Scenario 1: No voice detected (muted/silent) - Score 0-10
         if (!hasVoice) {
