@@ -1,140 +1,128 @@
-import type { AnswerAnalysis, AnalysisRequest } from './geminiAnalysisService';
+/**
+ * Static Analysis Service
+ * 
+ * Provides rule-based metrics and a minimal fallback for analysis.
+ * All comprehensive feedback is now handled dynamically via Gemini AI.
+ */
+
+import type { AnswerAnalysis, AnalysisRequest } from './geminiAnalysisService'
+
+export interface AudioMetrics {
+  duration: number // in seconds
+  hasVoice: boolean // whether voice was detected
+  transcript: string
+  wordCount: number
+  avgRms: number // average audio level
+  maxRms: number // peak audio level
+}
 
 export class StaticAnalysisService {
-  private staticResponses: Record<string, AnswerAnalysis> = {};
-  
-  constructor() {
-    // Initialize with some static responses for different question types
-    this.initializeStaticResponses();
+  /**
+   * Analyze audio metrics from recording
+   */
+  analyzeAudioMetrics(
+    audioBlob: Blob,
+    duration: number,
+    transcript: string,
+    audioLevelData: { maxRms: number; sumRms: number; frames: number }
+  ): AudioMetrics {
+    const wordCount = transcript.split(/\s+/).filter(w => w.length > 0).length
+    const avgRms = audioLevelData.frames > 0 ? audioLevelData.sumRms / audioLevelData.frames : 0
+    const maxRms = audioLevelData.maxRms
+
+    const bytesPerSecond = duration > 0 ? audioBlob.size / duration : 0
+    const hasAudioSignal = duration > 0 && audioBlob.size >= 2000 && bytesPerSecond >= 300 && (maxRms >= 0.015 || avgRms >= 0.008)
+    const hasVoice = hasAudioSignal || wordCount > 0
+
+    return {
+      duration,
+      hasVoice,
+      transcript,
+      wordCount,
+      avgRms,
+      maxRms
+    }
   }
 
-  private initializeStaticResponses() {
-    // Default response that can be used for any question
-    const defaultResponse: AnswerAnalysis = {
-      overallScore: 75,
-      transcript: '',
+  /**
+   * Minimal fallback analysis when AI is unavailable or input is invalid
+   */
+  generateStaticAnalysis(metrics: AudioMetrics): AnswerAnalysis {
+    const { duration, hasVoice, transcript } = metrics
+
+    // Basic state determination
+    const isShort = duration < 10
+    const score = !hasVoice ? 0 : (isShort ? 20 : 50)
+
+    return {
+      overallScore: score,
+      transcript: transcript || (hasVoice ? "[Voice detected but transcript unavailable]" : "[No voice detected]"),
       feedback: {
-        strengths: [
-          'Good use of specific examples',
-          'Clear and concise communication',
-          'Relevant experience mentioned'
-        ],
-        weaknesses: [
-          'Could provide more technical details',
-          'Answer could be more structured',
-          'Consider elaborating on the impact of your actions'
-        ],
-        suggestions: [
-          'Use the STAR method (Situation, Task, Action, Result) for more structured responses',
-          'Include specific metrics or results when possible',
-          'Practice varying your vocal tone for emphasis'
-        ],
-        detailedFeedback: 'Your response was good overall but could benefit from more specific examples and a clearer structure. Try to quantify your achievements where possible.'
+        strengths: hasVoice ? ['Audio captured successfully'] : [],
+        weaknesses: !hasVoice ? ['No voice detected'] : (isShort ? ['Response is very short'] : ['AI analysis temporarily unavailable']),
+        suggestions: !hasVoice ? ['Check microphone settings'] : ['Try recording a longer, more detailed response'],
+        detailedFeedback: !hasVoice
+          ? 'We could not detect any voice in your recording. Please ensure your microphone is working and speak clearly.'
+          : 'Your response has been captured. For a full AI-powered analysis with strengths and weaknesses, please ensure you have a stable connection and provide a detailed answer.'
       },
       scores: {
-        clarity: 78,
-        relevance: 82,
-        structure: 70,
-        completeness: 75,
-        confidence: 80
+        clarity: hasVoice ? 60 : 0,
+        relevance: hasVoice ? 50 : 0,
+        structure: hasVoice ? 40 : 0,
+        completeness: hasVoice ? 30 : 0,
+        confidence: hasVoice ? 50 : 0
       },
       keyPoints: {
-        covered: [
-          'Relevant experience mentioned',
-          'Clear explanation of your role'
-        ],
-        missed: [
-          'Specific metrics or results',
-          'Lessons learned from the experience'
-        ]
+        covered: [],
+        missed: []
       },
       timeManagement: {
-        duration: 0,
-        efficiency: 'good',
-        pacing: 'Good pace overall, with room for more detailed examples'
+        duration,
+        efficiency: duration > 45 ? 'good' : 'average',
+        pacing: hasVoice ? 'Pacing detected' : 'N/A'
       },
-      processingTime: 0
-    };
-
-    // Store the default response with a generic key
-    this.staticResponses['default'] = defaultResponse;
+      processingTime: 100
+    }
   }
 
-  async analyzeAnswer(request: AnalysisRequest): Promise<AnswerAnalysis> {
-    // Use a hash of the question as the key to potentially return different responses
-    const questionKey = this.hashCode(request.question.question) % 3; // 3 different variations
-    const responseKey = `response_${questionKey}`;
-    
-    // If we have a specific response for this question type, use it, otherwise use default
-    const response = this.staticResponses[responseKey] || this.staticResponses['default'];
-    
-    // Update the response with the actual transcript and duration
-    return {
-      ...response,
+  /**
+   * Legacy method for compatibility
+   */
+  analyzeAnswer(request: AnalysisRequest): Promise<AnswerAnalysis> {
+    const wordCount = request.transcript.split(/\s+/).filter(w => w.length > 0).length
+    return Promise.resolve(this.generateStaticAnalysis({
+      duration: request.audioDuration,
+      hasVoice: wordCount > 0,
       transcript: request.transcript,
-      timeManagement: {
-        ...response.timeManagement,
-        duration: request.audioDuration
-      },
-      processingTime: 500 // Simulate processing time in ms
-    };
+      wordCount: wordCount,
+      avgRms: 0,
+      maxRms: 0
+    }))
   }
 
+  /**
+   * Generate quick metrics for immediate UI feedback
+   */
   generateQuickFeedback(transcript: string, duration: number) {
-    const wordCount = transcript.split(/\s+/).filter((w: string) => w.length > 0).length;
-    const wordsPerMinute = Math.round((wordCount / duration) * 60);
+    const wordCount = transcript.split(/\s+/).filter((w: string) => w.length > 0).length
+    const wordsPerMinute = duration > 0 ? Math.round((wordCount / duration) * 60) : 0
 
     return {
       wordCount,
       duration,
       wordsPerMinute,
       estimatedScore: Math.min(Math.max(Math.round((wordCount / 100) * 80 + 20), 20), 95),
-      quickTips: this.getQuickTips(wordCount, duration, wordsPerMinute)
-    };
+      quickTips: this.getQuickTips(wordCount, duration)
+    }
   }
 
-  private getQuickTips(wordCount: number, duration: number, wpm: number): string[] {
-    const tips: string[] = [];
-
-    if (duration < 30) {
-      tips.push('Consider providing more detailed examples');
-    } else if (duration > 180) {
-      tips.push('Try to be more concise and focus on key points');
-    }
-
-    if (wpm < 100) {
-      tips.push('Speaking a bit faster could help convey confidence');
-    } else if (wpm > 200) {
-      tips.push('Speaking slower could improve clarity');
-    }
-
-    if (wordCount < 50) {
-      tips.push('Expanding with specific examples would strengthen your response');
-    }
-
-    return tips;
-  }
-
-  isConfigured(): boolean {
-    return true;
-  }
-
-  getModel(): string {
-    return 'static-analysis';
-  }
-
-  // Helper function to generate a simple hash code
-  private hashCode(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash);
+  private getQuickTips(wordCount: number, duration: number): string[] {
+    const tips: string[] = []
+    if (duration > 0 && duration < 30) tips.push('Aim for a longer response')
+    if (wordCount > 0 && wordCount < 50) tips.push('Add more specific examples')
+    return tips
   }
 }
 
-// Export singleton instance
-export const staticAnalysisService = new StaticAnalysisService();
-export default staticAnalysisService;
+export const staticAnalysisService = new StaticAnalysisService()
+export default staticAnalysisService

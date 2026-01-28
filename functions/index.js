@@ -50,7 +50,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || functions.config().app?.a
   .filter(Boolean)
 
 app.use(cors({
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     // allow requests with no origin (like curl or server-to-server)
     if (!origin) return callback(null, true)
     if (allowedOrigins.length === 0) return callback(null, true) // permissive if not configured
@@ -98,8 +98,8 @@ app.post('/gemini-proxy', async (req, res) => {
   try {
     if (!GEMINI_KEY) return res.status(500).json({ error: 'Gemini key not configured on server.' })
 
-    // Expect body: { model: 'models/text-bison-001', input: 'Hello' }
-    const { model = 'models/text-bison-001', input } = req.body || {}
+    // Expect body: { model: 'gemini-2.5-flash', input: 'Hello' }
+    const { model = 'gemini-2.5-flash', input } = req.body || {}
     if (!input) return res.status(400).json({ error: 'Missing input in request body' })
 
     // Example endpoint for text generation (may vary depending on Google Cloud setup)
@@ -205,11 +205,11 @@ exports.setAdminWithSeats = functions.https.onCall(async (data, context) => {
     }
   } catch (error) {
     console.error('Error in setAdminWithSeats:', error)
-    
+
     if (error.code === 'auth/user-not-found') {
       throw new functions.https.HttpsError('not-found', `No user found with email: ${data.email}`)
     }
-    
+
     throw new functions.https.HttpsError('internal', error.message)
   }
 })
@@ -260,11 +260,11 @@ exports.updateSeats = functions.https.onCall(async (data, context) => {
     }
   } catch (error) {
     console.error('Error in updateSeats:', error)
-    
+
     if (error.code === 'auth/user-not-found') {
       throw new functions.https.HttpsError('not-found', `No user found with email: ${data.email}`)
     }
-    
+
     throw new functions.https.HttpsError('internal', error.message)
   }
 })

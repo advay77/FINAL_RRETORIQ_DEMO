@@ -50,7 +50,7 @@ module.exports = async (req, res) => {
         `Transcribe the attached audio into plain text${language ? ` in language code \"${language}\"` : ''}. ` +
         `Return ONLY the transcript text, no markdown, no JSON, no timestamps.`
 
-      const model = 'gemini-2.0-flash'
+      const model = 'gemini-2.5-flash'
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`
 
       const payload = {

@@ -84,6 +84,8 @@ class SpeechToTextService {
       language = 'en',
     } = options
 
+    const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY
+
     try {
       // Prepare audio file
       const audioFile = await this.prepareAudioFile(audioBlob)
@@ -91,26 +93,48 @@ class SpeechToTextService {
       // Create form data
       const formData = new FormData()
       formData.append('file', audioFile)
+      formData.append('model', 'whisper-1')
 
       // Set language (use 'auto' for automatic detection)
       if (language !== 'auto') {
         formData.append('language', language)
       }
 
-      console.log('🎤 Sending to Gemini transcription proxy...', {
-        language: language === 'auto' ? 'auto-detect' : language,
-        fileSize: `${(audioFile.size / 1024).toFixed(2)} KB`
-      })
+      let response;
 
-      // Upload to server-side whisper proxy (server holds OpenAI key)
-      const response = await fetch(GEMINI_TRANSCRIBE_PROXY_URL, {
-        method: 'POST',
-        body: formData
-      })
+      // If we have a direct API key, try calling OpenAI directly first (bypasses CORS issues with custom proxies)
+      if (OPENAI_KEY && OPENAI_KEY.startsWith('sk-')) {
+        console.log('🎤 Calling OpenAI Whisper API directly...')
+        response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_KEY}`
+          },
+          body: formData
+        })
+      } else {
+        console.log('🎤 Sending to Gemini 2.5 Flash transcription proxy...', {
+          language: language === 'auto' ? 'auto-detect' : language,
+          fileSize: `${(audioFile.size / 1024).toFixed(2)} KB`
+        })
+
+        // Upload to server-side whisper proxy (server holds OpenAI key)
+        response = await fetch(GEMINI_TRANSCRIBE_PROXY_URL, {
+          method: 'POST',
+          body: formData
+        })
+      }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-        console.error('❌ Gemini Transcription Error:', {
+        const errorText = await response.text()
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText)
+        } catch (e) {
+          errorData = { error: { message: errorText || response.statusText } }
+        }
+
+        console.error('❌ Transcription Error:', {
           status: response.status,
           error: errorData.error || errorData
         })
@@ -122,13 +146,13 @@ class SpeechToTextService {
           throw new Error('Rate limit exceeded. Please wait a moment and try again')
         }
 
-        throw new Error(`Gemini transcription error: ${errorData.error?.message || errorData.error || response.statusText}`)
+        throw new Error(`Transcription error: ${errorData.error?.message || errorData.error || response.statusText}`)
       }
 
       const data = await response.json()
       const processingTime = Date.now() - startTime
 
-      console.log('📊 Gemini transcription response:', {
+      console.log('📊 Gemini 2.5 Flash transcription response:', {
         hasText: !!data.text,
         textLength: data.text?.length || 0,
         processingTime: `${processingTime}ms`

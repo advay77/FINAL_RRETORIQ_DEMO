@@ -9,6 +9,12 @@ export default defineConfig({
     global: 'globalThis',
   },
   server: {
+    proxy: {
+      '/api': {
+        target: 'https://classrretoriq.vercel.app',
+        changeOrigin: true,
+      },
+    },
     headers: {
       // Prevent Firebase Auth popup warnings due to COOP restrictions
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',

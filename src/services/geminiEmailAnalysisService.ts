@@ -5,7 +5,7 @@ const API_PROXY_BASE = import.meta.env.VITE_API_PROXY_BASE || (typeof window !==
 const GEMINI_PROXY_URL = `${API_PROXY_BASE}/gemini-proxy`
 
 // Gemini model configuration
-const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash-exp'
+const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash'
 
 export interface EmailAnalysisResult {
   overallScore: number;
@@ -119,7 +119,7 @@ Provide a comprehensive analysis in the following JSON format. Be constructive, 
 
     // Extract JSON from the response
     let jsonText = text.trim();
-    
+
     // Remove markdown code blocks if present
     if (jsonText.startsWith('```json')) {
       jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');

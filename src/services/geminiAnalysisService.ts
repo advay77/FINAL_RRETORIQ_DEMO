@@ -5,7 +5,7 @@
  * Much more cost-effective than OpenAI GPT-4 (~99% cheaper)
  * 
  * Pricing (as of 2025):
- * - Gemini 1.5 Flash: ~$0.0001 per analysis (recommended)
+ * - Gemini 2.5 Flash: ~$0.0001 per analysis (recommended)
  * - Gemini 1.5 Pro: ~$0.001 per analysis (higher quality)
  */
 
@@ -14,7 +14,9 @@ const API_PROXY_BASE = import.meta.env.VITE_API_PROXY_BASE || (typeof window !==
 const GEMINI_PROXY_URL = `${API_PROXY_BASE}/gemini-proxy`
 
 // Gemini model (still configurable client-side, but key lives on server)
-const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash-exp'
+const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash'
+
+import { staticAnalysisService, type AudioMetrics } from './staticAnalysisService'
 
 export interface InterviewQuestion {
   id: string
@@ -59,14 +61,48 @@ export interface AnalysisRequest {
   question: InterviewQuestion
   audioDuration: number // in seconds
   transcriptionConfidence: number
+  audioBlob?: Blob // Optional for static metrics fallback
+  audioLevelData?: { maxRms: number; sumRms: number; frames: number } // Optional for static metrics fallback
 }
 
 class GeminiAnalysisService {
   private model: string
 
   constructor() {
-    // The API key and endpoint live on the server-side proxy.
     this.model = GEMINI_MODEL
+  }
+
+  /**
+   * Process a full audio response with optional AI analysis
+   */
+  async processAudioResponse(request: AnalysisRequest): Promise<AnswerAnalysis> {
+    // If we have blob data, we can calculate real metrics first
+    let audioMetrics: AudioMetrics | null = null
+    if (request.audioBlob && request.audioLevelData) {
+      audioMetrics = staticAnalysisService.analyzeAudioMetrics(
+        request.audioBlob,
+        request.audioDuration,
+        request.transcript,
+        request.audioLevelData
+      )
+    }
+
+    // Attempt AI analysis if transcript exists
+    if (request.transcript.trim().length > 0) {
+      try {
+        return await this.analyzeAnswer(request)
+      } catch (error) {
+        console.warn('⚠️ Gemini AI analysis failed, falling back to static analysis:', error)
+      }
+    }
+
+    // Static fallback if AI fails or no transcript
+    if (audioMetrics) {
+      return staticAnalysisService.generateStaticAnalysis(audioMetrics)
+    }
+
+    // Absolute fallback if everything else fails
+    return staticAnalysisService.analyzeAnswer(request)
   }
 
   /**
@@ -136,6 +172,7 @@ Return ONLY the JSON object, no additional text.`
    */
   async analyzeAnswer(request: AnalysisRequest): Promise<AnswerAnalysis> {
     const startTime = Date.now()
+    const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GOOGLE_SPEECH_API_KEY
 
     try {
       const prompt = this.generateAnalysisPrompt(
@@ -145,77 +182,69 @@ Return ONLY the JSON object, no additional text.`
         request.transcriptionConfidence
       )
 
-      console.log('🤖 Starting Gemini AI analysis via server proxy...', {
+      console.log('🤖 Starting Gemini AI analysis...', {
         model: this.model,
         questionType: request.question.type,
         transcriptLength: request.transcript.length,
-        duration: request.audioDuration
+        duration: request.audioDuration,
+        method: GEMINI_KEY ? 'Direct API' : 'Server Proxy'
       })
 
-      const response = await fetch(GEMINI_PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: this.model, input: prompt })
-      })
+      let response;
+
+      if (GEMINI_KEY && GEMINI_KEY.startsWith('AIza')) {
+        // Direct call to Google Gemini API
+        // Use gemini-2.5-flash as it's the most stable/available
+        const modelName = 'gemini-2.5-flash'
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_KEY}`
+
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        })
+      } else {
+        // Fallback to server proxy
+        response = await fetch(GEMINI_PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: this.model, input: prompt })
+        })
+      }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }))
-        console.error('❌ Gemini API Error:', errorData)
-
-        // Provide specific error messages
-        if (response.status === 400) {
-          throw new Error(`Invalid request: ${errorData.error?.message || 'Bad request'}`)
-        } else if (response.status === 403) {
-          throw new Error('Invalid Gemini API key. Please check your VITE_GEMINI_API_KEY')
-        } else if (response.status === 429) {
-          throw new Error('Rate limit exceeded. Please wait a moment and try again')
-        }
-
-        throw new Error(`Gemini API error: ${errorData.error?.message || response.statusText}`)
+        const errorText = await response.text()
+        throw new Error(`Gemini API error (${response.status}): ${errorText.substring(0, 100)}`)
       }
 
       const data = await response.json()
       const processingTime = Date.now() - startTime
 
-      console.log('📊 Gemini API response received:', {
-        hasCandidates: !!data.candidates,
-        processingTime: `${processingTime}ms`
-      })
+      let analysisText = ''
 
-      if (!data.candidates || data.candidates.length === 0) {
+      // Handle both direct API response structure and proxy response structure
+      if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+        analysisText = data.candidates[0].content.parts[0].text
+      } else if (data.text) {
+        analysisText = data.text
+      } else if (data.response) {
+        analysisText = data.response
+      } else {
         throw new Error('No analysis results received from Gemini')
       }
 
-      const candidate = data.candidates[0]
-      if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
-        throw new Error('Invalid response format from Gemini')
+      // Remove markdown code blocks if present
+      let cleanedText = analysisText.trim()
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/^```json\n?/, '').replace(/\n?```$/, '')
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```\n?/, '').replace(/\n?```$/, '')
       }
 
-      const analysisText = candidate.content.parts[0].text
-      let analysisResult
+      const analysisResult = JSON.parse(cleanedText)
 
-      try {
-        // Remove markdown code blocks if present
-        let cleanedText = analysisText.trim()
-        if (cleanedText.startsWith('```json')) {
-          cleanedText = cleanedText.replace(/^```json\n/, '').replace(/\n```$/, '')
-        } else if (cleanedText.startsWith('```')) {
-          cleanedText = cleanedText.replace(/^```\n/, '').replace(/\n```$/, '')
-        }
-
-        analysisResult = JSON.parse(cleanedText)
-      } catch (parseError) {
-        console.error('Failed to parse Gemini response:', analysisText)
-        throw new Error('Invalid JSON response from Gemini. Please try again.')
-      }
-
-      console.log('✅ Gemini analysis completed', {
-        overallScore: analysisResult.overallScore,
-        processingTime: `${processingTime}ms`,
-        model: this.model
-      })
-
-      // Return the complete analysis with additional metadata
       return {
         ...analysisResult,
         transcript: request.transcript,
@@ -227,37 +256,8 @@ Return ONLY the JSON object, no additional text.`
       }
 
     } catch (error) {
-      const processingTime = Date.now() - startTime
-      console.error('❌ Gemini analysis failed FULL DETAILS:', error) // Changed logging
-
-      // Return fallback analysis
-      return {
-        overallScore: 0,
-        transcript: request.transcript,
-        feedback: {
-          strengths: [],
-          weaknesses: ['Analysis service temporarily unavailable'],
-          suggestions: ['Please try again later'],
-          detailedFeedback: 'We encountered an issue analyzing your response. Please try again later.'
-        },
-        scores: {
-          clarity: 0,
-          relevance: 0,
-          structure: 0,
-          completeness: 0,
-          confidence: 0
-        },
-        keyPoints: {
-          covered: [],
-          missed: []
-        },
-        timeManagement: {
-          duration: request.audioDuration,
-          efficiency: 'poor',
-          pacing: 'Unable to analyze due to service error'
-        },
-        processingTime
-      }
+      console.error('❌ Gemini AI analysis error:', error)
+      throw error // Let processAudioResponse handle fallback
     }
   }
 
@@ -265,49 +265,13 @@ Return ONLY the JSON object, no additional text.`
    * Generate quick feedback for immediate display
    */
   generateQuickFeedback(transcript: string, duration: number) {
-    const wordCount = transcript.split(/\s+/).filter((w: string) => w.length > 0).length
-    const wordsPerMinute = Math.round((wordCount / duration) * 60)
-
-    return {
-      wordCount,
-      duration,
-      wordsPerMinute,
-      estimatedScore: Math.min(Math.max(Math.round((wordCount / 100) * 80 + 20), 20), 95),
-      quickTips: this.getQuickTips(wordCount, duration, wordsPerMinute)
-    }
-  }
-
-  /**
-   * Generate quick tips based on metrics
-   */
-  private getQuickTips(wordCount: number, duration: number, wpm: number): string[] {
-    const tips: string[] = []
-
-    if (duration < 30) {
-      tips.push('Consider providing more detailed examples')
-    } else if (duration > 180) {
-      tips.push('Try to be more concise and focus on key points')
-    }
-
-    if (wpm < 100) {
-      tips.push('Speaking a bit faster could help convey confidence')
-    } else if (wpm > 200) {
-      tips.push('Speaking slower could improve clarity')
-    }
-
-    if (wordCount < 50) {
-      tips.push('Expanding with specific examples would strengthen your response')
-    }
-
-    return tips
+    return staticAnalysisService.generateQuickFeedback(transcript, duration)
   }
 
   /**
    * Check if service is properly configured
    */
   isConfigured(): boolean {
-    // Client-side configuration always considered true because the server proxy
-    // holds the required API key. This avoids exposing keys in the browser.
     return true
   }
 

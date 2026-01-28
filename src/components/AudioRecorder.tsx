@@ -22,8 +22,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { speechToTextService, type TranscriptionResult } from '../services/speechToTextService'
-import { type AnswerAnalysis, type InterviewQuestion } from '../services/geminiAnalysisService'
-import { staticFeedbackService } from '../services/staticFeedbackService'
+import { geminiAnalysisService, type AnswerAnalysis, type InterviewQuestion } from '../services/geminiAnalysisService'
 
 interface AudioRecorderProps {
   question: InterviewQuestion
@@ -391,8 +390,8 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     setError(null)
 
     try {
-      // Step 1: Try to transcribe (optional - won't fail if this fails)
-      setAnalysisFeedback('🎤 Transcribing your audio...')
+      // Step 1: Transcribe audio
+      setAnalysisFeedback('Transcribing...')
       let transcriptText = ''
 
       try {
@@ -402,36 +401,24 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
         if (transcription.success && transcription.transcript) {
           transcriptText = transcription.transcript
-          console.log('✅ Transcription successful:', transcriptText.substring(0, 50) + '...')
-        } else {
-          console.warn('⚠️ Transcription failed, continuing with empty transcript')
         }
       } catch (transcriptionError) {
-        console.warn('⚠️ Transcription error (continuing anyway):', transcriptionError)
+        // Silently continue for better UX, fallback analysis handles empty transcript
       }
 
-      // Step 2: Analyze audio metrics (works with or without transcript)
-      setAnalysisFeedback('📊 Analyzing your response...')
-      const audioMetrics = staticFeedbackService.analyzeAudioMetrics(
-        audioBlob,
-        duration,
-        transcriptText,
-        audioLevelRef.current
-      )
-
-      // Step 3: Generate static feedback (ALWAYS happens)
-      const analysis = staticFeedbackService.generateFeedback(audioMetrics)
-
-      console.log('✅ Static feedback generated:', {
-        scenario: audioMetrics.hasVoice ? (audioMetrics.duration < 5 ? 'short' : 'good') : 'no-voice',
-        score: analysis.overallScore,
-        duration: audioMetrics.duration,
-        wordCount: audioMetrics.wordCount,
-        hasTranscript: transcriptText.length > 0
+      // Step 2 & 3: Generate analysis
+      setAnalysisFeedback('Analyzing...')
+      const analysis = await geminiAnalysisService.processAudioResponse({
+        transcript: transcriptText,
+        question: question,
+        audioDuration: duration,
+        transcriptionConfidence: transcriptionResult?.confidence || 0,
+        audioBlob: audioBlob,
+        audioLevelData: audioLevelRef.current
       })
 
       onAnalysisComplete?.(analysis)
-      setAnalysisFeedback('✅ Analysis complete!')
+      setAnalysisFeedback('Analysis Complete!')
       setRecordingState('completed')
 
     } catch (error) {
