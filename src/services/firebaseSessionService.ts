@@ -23,7 +23,7 @@ import {
   increment
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import type { AnswerAnalysis } from './openAIAnalysisService'
+import type { AnswerAnalysis } from './geminiAnalysisService'
 import type { TranscriptionResult } from './speechToTextService'
 
 // ==========================================

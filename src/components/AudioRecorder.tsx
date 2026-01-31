@@ -32,6 +32,7 @@ interface AudioRecorderProps {
   autoStop?: boolean // auto-stop when max duration reached
   className?: string
   showTranscription?: boolean // whether to display the transcription text (default: true)
+  initialAudioBlob?: Blob | null // Initial audio blob from library
 }
 
 type RecordingState = 'idle' | 'recording' | 'paused' | 'stopped' | 'processing' | 'completed'
@@ -43,7 +44,8 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   maxDuration = 300,
   autoStop = true,
   className = '',
-  showTranscription = true
+  showTranscription = true,
+  initialAudioBlob = null
 }) => {
   // Recording state management
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
@@ -73,6 +75,22 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     sumRms: 0,
     frames: 0
   })
+
+  // Handle initial audio blob
+  useEffect(() => {
+    if (initialAudioBlob) {
+      const url = URL.createObjectURL(initialAudioBlob)
+      setAudioBlob(initialAudioBlob)
+      setAudioURL(url)
+      setRecordingState('stopped')
+
+      const audio = new Audio()
+      audio.src = url
+      audio.onloadedmetadata = () => {
+        setDuration(Math.round(audio.duration))
+      }
+    }
+  }, [initialAudioBlob])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -455,6 +473,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
   return (
     <div className={`bg-white border border-gray-200 rounded-xl p-6 ${className}`}>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Record Your Answer</h3>
@@ -499,7 +518,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         {recordingState === 'idle' && (
           <button
             onClick={startRecording}
-            className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-colors"
+            className="flex items-center space-x-2 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition-all hover:scale-105 shadow-md"
           >
             <Mic className="w-5 h-5" />
             <span>Start Recording</span>
@@ -543,7 +562,6 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
               )}
               <span>{isAnalyzing ? 'Processing...' : 'Analyze Answer'}</span>
             </button>
-
             <button
               onClick={resetRecording}
               className="flex items-center space-x-2 bg-gray-600 text-white px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors"

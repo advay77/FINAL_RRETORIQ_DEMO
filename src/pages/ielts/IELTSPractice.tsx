@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Play,
@@ -32,6 +32,9 @@ export default function IELTSPractice() {
   const [responses, setResponses] = useState<{ [key: string]: string }>({})
   const [sessionStarted, setSessionStarted] = useState(false)
   const [sessionComplete, setSessionComplete] = useState(false)
+  const [isCustomVoiceSession, setIsCustomVoiceSession] = useState(false)
+  const [customAudioFiles, setCustomAudioFiles] = useState<string[]>([])
+  const [currentAudioIndex, setCurrentAudioIndex] = useState(0)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [selectedQuestions, setSelectedQuestions] = useState<CommunicationQuestion[]>([])
   const [selectedReadingQuestions, setSelectedReadingQuestions] = useState<ReadingImageQuestion[]>([])
@@ -47,8 +50,23 @@ export default function IELTSPractice() {
   const [currentTranscription, setCurrentTranscription] = useState<TranscriptionResult | null>(null)
   const [audioStartTime, setAudioStartTime] = useState<number | null>(null)
   const [writingDifficulty, setWritingDifficulty] = useState<'Easy' | 'Medium' | 'Hard' | null>(null)
+  const [libraryBlob, setLibraryBlob] = useState<Blob | null>(null)
 
   const isReading = selectedType === 'reading'
+
+  useEffect(() => {
+    if (isCustomVoiceSession && customAudioFiles.length > 0 && currentAudioIndex < customAudioFiles.length) {
+      const currentFile = customAudioFiles[currentAudioIndex]
+      console.log("Loading custom voice file:", currentFile)
+      fetch(`/voice/${currentFile}`)
+        .then(res => res.blob())
+        .then(blob => {
+          setLibraryBlob(blob)
+          console.log("Custom voice file loaded as blob:", blob.size)
+        })
+        .catch(err => console.error("Error fetching custom voice file:", err))
+    }
+  }, [isCustomVoiceSession, customAudioFiles, currentAudioIndex])
 
   const skillTypes = [
     {
@@ -237,6 +255,310 @@ export default function IELTSPractice() {
     // For writing, we'll add logic when questions are available
   }
 
+  const loadAudioFile = async (fileName: string) => {
+    console.log("Loading custom voice file:", fileName)
+    try {
+      const response = await fetch(`/voice/${fileName}`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${fileName}: ${response.statusText}`)
+      }
+      const blob = await response.blob()
+      setLibraryBlob(blob)
+      console.log("Custom voice file loaded as blob:", blob.size)
+    } catch (err) {
+      console.error("Error fetching custom voice file:", err)
+      setLibraryBlob(null)
+    }
+  }
+
+  const startCustomVoiceSession = async () => {
+    if (!auth.currentUser) {
+      alert('Please log in to start a practice session.')
+      return
+    }
+
+    // Check session limits before starting
+    const limitCheck = await sessionLimitService.canStartSession(
+      auth.currentUser.uid,
+      'ielts',
+      'voice'
+    )
+
+    if (!limitCheck.allowed) {
+      alert(limitCheck.reason || 'You have reached your monthly limit for this session type.')
+      return
+    }
+
+    setIsCustomVoiceSession(true)
+    setSelectedType('voice')
+    setShowPreferences(false)
+    setSessionStarted(true)
+    setSessionStartTime(new Date())
+
+    // Create Firebase session
+    try {
+      const newSessionId = await firebaseSessionService.createSession(
+        auth.currentUser.uid,
+        'ielts',
+        undefined,
+        'voice'
+      )
+      setSessionId(newSessionId)
+      console.log('✅ Custom Voice Session created:', newSessionId)
+    } catch (error) {
+      console.error('❌ Failed to create session:', error)
+    }
+
+    // All voice files from public/voice/
+    const allVoiceFiles = [
+      'The Borrowed Grade (1).mp3',
+      'The Borrowed Research (1).mp3',
+      'The Bug in the Bank (1).mp3',
+      'The Client\'s False Hope (1).mp3',
+      'The Club Funds (1).mp3',
+      'The Compromised Proctor (1).mp3',
+      'The Cost-Cutting Danger (1).mp3',
+      'The Credit Stealer (1).mp3',
+      'The Diversity Hire (1).mp3',
+      'The Diversity vs. Merit (1).mp3',
+      'The Fake Internship (1).mp3',
+      'The Placement Dilemma.mp3',
+      'The Social Media Firestorm.mp3',
+      'The Stolen Project.mp3',
+      'The Toxic Client.mp3',
+      'The Whistleblower\'s Price.mp3',
+      'The Work-Life Ultimatum.mp3'
+    ]
+
+    setCustomAudioFiles(allVoiceFiles)
+    setCurrentAudioIndex(0)
+
+    // Load the first audio file
+    await loadAudioFile(allVoiceFiles[0])
+
+    // Create questions for each voice file with specific scenarios
+    const voiceFileQuestions = allVoiceFiles.map((fileName, index) => {
+      const cleanFileName = fileName.replace('.mp3', '').replace(' (1)', '')
+
+      // Specific content for each audio file
+      const audioFileContent = {
+        'The Borrowed Grade': {
+          question: 'Analyzing: The Borrowed Grade',
+          instructions: 'Listen to the conversation about academic integrity where someone is discussing a situation involving grade manipulation. Analyze the speaker\'s ethical reasoning, confidence level, and communication approach when addressing this sensitive academic issue.',
+          keyPoints: [
+            'Ethical communication in academic settings',
+            'Tone when discussing academic misconduct',
+            'Clarity in explaining complex situations',
+            'Professionalism in handling sensitive topics',
+            'Persuasive communication skills'
+          ]
+        },
+        'The Borrowed Research': {
+          question: 'Analyzing: The Borrowed Research',
+          instructions: 'Listen to the discussion about research integrity and intellectual property. Evaluate how the speaker communicates about plagiarism, research ethics, and the importance of original academic work.',
+          keyPoints: [
+            'Academic integrity communication',
+            'Research ethics articulation',
+            'Professional tone in scholarly discussions',
+            'Clarity in explaining research concepts',
+            'Confidence in academic discourse'
+          ]
+        },
+        'The Bug in the Bank': {
+          question: 'Analyzing: The Bug in the Bank',
+          instructions: 'Listen to the technical communication about a banking system issue. Assess the speaker\'s ability to explain technical problems clearly, maintain professionalism under pressure, and communicate with stakeholders.',
+          keyPoints: [
+            'Technical communication clarity',
+            'Crisis communication skills',
+            'Professional tone in problem-solving',
+            'Stakeholder communication effectiveness',
+            'Confidence in technical explanations'
+          ]
+        },
+        'The Client\'s False Hope': {
+          question: 'Analyzing: The Client\'s False Hope',
+          instructions: 'Listen to the difficult client conversation about managing expectations. Analyze how the speaker handles delivering disappointing news while maintaining professional relationships.',
+          keyPoints: [
+            'Difficult conversation management',
+            'Client relationship communication',
+            'Empathy in professional settings',
+            'Clarity in managing expectations',
+            'Professional diplomacy skills'
+          ]
+        },
+        'The Club Funds': {
+          question: 'Analyzing: The Club Funds',
+          instructions: 'Listen to the discussion about financial management and organizational responsibility. Evaluate the speaker\'s communication about financial accountability and organizational governance.',
+          keyPoints: [
+            'Financial communication clarity',
+            'Organizational leadership communication',
+            'Transparency in financial discussions',
+            'Professional accountability articulation',
+            'Stakeholder trust building'
+          ]
+        },
+        'The Compromised Proctor': {
+          question: 'Analyzing: The Compromised Proctor',
+          instructions: 'Listen to the conversation about examination integrity and professional ethics. Assess how the speaker addresses issues of academic misconduct and professional responsibility.',
+          keyPoints: [
+            'Professional ethics communication',
+            'Academic integrity articulation',
+            'Crisis management in educational settings',
+            'Professional judgment communication',
+            'Ethical decision-making expression'
+          ]
+        },
+        'The Cost-Cutting Danger': {
+          question: 'Analyzing: The Cost-Cutting Danger',
+          instructions: 'Listen to the business discussion about financial decisions and risk management. Analyze the speaker\'s ability to communicate business risks and strategic considerations.',
+          keyPoints: [
+            'Business risk communication',
+            'Strategic decision articulation',
+            'Professional business discourse',
+            'Financial clarity in explanations',
+            'Leadership communication skills'
+          ]
+        },
+        'The Credit Stealer': {
+          question: 'Analyzing: The Credit Stealer',
+          instructions: 'Listen to the workplace conversation about professional recognition and attribution. Evaluate how the speaker addresses issues of credit, recognition, and professional integrity.',
+          keyPoints: [
+            'Professional integrity communication',
+            'Workplace conflict resolution',
+            'Assertiveness in professional settings',
+            'Clear articulation of contributions',
+            'Professional boundary setting'
+          ]
+        },
+        'The Diversity Hire': {
+          question: 'Analyzing: The Diversity Hire',
+          instructions: 'Listen to the sensitive discussion about workplace diversity and inclusion. Assess the speaker\'s ability to communicate about diversity, equity, and inclusion topics professionally.',
+          keyPoints: [
+            'DEI communication sensitivity',
+            'Inclusive language usage',
+            'Professional diversity discourse',
+            'Cultural competence expression',
+            'Respectful communication skills'
+          ]
+        },
+        'The Diversity vs. Merit': {
+          question: 'Analyzing: The Diversity vs. Merit',
+          instructions: 'Listen to the complex discussion about diversity initiatives and merit-based systems. Analyze how the speaker navigates this sensitive topic with balance and professionalism.',
+          keyPoints: [
+            'Balanced perspective communication',
+            'Sensitive topic navigation',
+            'Professional discourse on complex issues',
+            'Nuanced argument articulation',
+            'Respectful disagreement skills'
+          ]
+        },
+        'The Fake Internship': {
+          question: 'Analyzing: The Fake Internship',
+          instructions: 'Listen to the conversation about professional authenticity and career development. Evaluate how the speaker addresses issues of credential authenticity and professional integrity.',
+          keyPoints: [
+            'Professional authenticity communication',
+            'Career guidance articulation',
+            'Ethical professional development',
+            'Mentorship communication skills',
+            'Professional integrity expression'
+          ]
+        },
+        'The Placement Dilemma': {
+          question: 'Analyzing: The Placement Dilemma',
+          instructions: 'Listen to the career counseling discussion about placement decisions. Assess the speaker\'s ability to provide guidance, explain options, and support decision-making.',
+          keyPoints: [
+            'Career counseling communication',
+            'Decision-making support articulation',
+            'Professional guidance skills',
+            'Option analysis clarity',
+            'Empathetic professional support'
+          ]
+        },
+        'The Social Media Firestorm': {
+          question: 'Analyzing: The Social Media Firestorm',
+          instructions: 'Listen to the crisis communication about social media issues. Analyze how the speaker handles online reputation management and crisis communication.',
+          keyPoints: [
+            'Crisis communication effectiveness',
+            'Social media management articulation',
+            'Professional online presence communication',
+            'Reputation management skills',
+            'Calm under pressure demonstration'
+          ]
+        },
+        'The Stolen Project': {
+          question: 'Analyzing: The Stolen Project',
+          instructions: 'Listen to the conversation about intellectual property and professional boundaries. Evaluate how the speaker addresses issues of project ownership and professional ethics.',
+          keyPoints: [
+            'Intellectual property communication',
+            'Professional boundary articulation',
+            'Conflict resolution in workplace',
+            'Assertive professional communication',
+            'Ethical stance clarity'
+          ]
+        },
+        'The Toxic Client': {
+          question: 'Analyzing: The Toxic Client',
+          instructions: 'Listen to the difficult client relationship discussion. Assess how the speaker handles toxic behavior while maintaining professional boundaries and service quality.',
+          keyPoints: [
+            'Toxic relationship management',
+            'Professional boundary setting',
+            'Difficult client communication',
+            'Service quality maintenance',
+            'Emotional intelligence demonstration'
+          ]
+        },
+        'The Whistleblower\'s Price': {
+          question: 'Analyzing: The Whistleblower\'s Price',
+          instructions: 'Listen to the conversation about whistleblowing and professional courage. Analyze how the speaker communicates about ethical responsibilities and professional consequences.',
+          keyPoints: [
+            'Ethical courage communication',
+            'Professional risk articulation',
+            'Whistleblowing process explanation',
+            'Moral conviction expression',
+            'Professional integrity demonstration'
+          ]
+        },
+        'The Work-Life Ultimatum': {
+          question: 'Analyzing: The Work-Life Ultimatum',
+          instructions: 'Listen to the discussion about work-life balance and professional boundaries. Evaluate how the speaker negotiates personal and professional priorities.',
+          keyPoints: [
+            'Work-life balance communication',
+            'Professional boundary articulation',
+            'Negotiation skills demonstration',
+            'Personal priority expression',
+            'Professional sustainability discussion'
+          ]
+        }
+      }
+
+      const content = audioFileContent[cleanFileName as keyof typeof audioFileContent] || {
+        question: `Analyzing: ${cleanFileName}`,
+        instructions: `Listen to the voice sample "${cleanFileName}" and provide your analysis on the communication skills demonstrated. Focus on voice clarity, speaking pace, tone, and overall effectiveness.`,
+        keyPoints: [
+          `Voice clarity and pronunciation in "${cleanFileName}"`,
+          'Speaking pace and rhythm analysis',
+          'Tone and emotional expression',
+          'Communication effectiveness and confidence',
+          'Professional communication skills demonstrated'
+        ]
+      }
+
+      return {
+        id: `voice-${index + 1}`,
+        question: content.question,
+        instructions: content.instructions,
+        timeLimit: 90,
+        difficulty: 'Medium' as const,
+        type: 'speaking' as const,
+        keyPoints: content.keyPoints
+      }
+    })
+
+    setSelectedQuestions(voiceFileQuestions)
+    setCurrentQuestion(voiceFileQuestions[0])
+    setCurrentQuestionIndex(0)
+  }
+
   const nextQuestion = async () => {
     const totalQuestions = selectedType === 'reading' ? selectedReadingQuestions.length : selectedQuestions.length
 
@@ -248,6 +570,16 @@ export default function IELTSPractice() {
         setCurrentReadingQuestion(selectedReadingQuestions[nextIndex])
       } else {
         setCurrentQuestion(selectedQuestions[nextIndex])
+      }
+
+      // For custom voice session, load next audio file and update question
+      if (isCustomVoiceSession && customAudioFiles[nextIndex]) {
+        await loadAudioFile(customAudioFiles[nextIndex])
+        setCurrentAudioIndex(nextIndex)
+        // Update current question to match the new audio file
+        if (selectedQuestions[nextIndex]) {
+          setCurrentQuestion(selectedQuestions[nextIndex])
+        }
       }
 
       setAnalysis(null)
@@ -294,6 +626,10 @@ export default function IELTSPractice() {
     setCurrentQuestionIndex(0)
     setShowPreferences(false)
     setAnalysis(null)
+    setIsCustomVoiceSession(false)
+    setCustomAudioFiles([])
+    setCurrentAudioIndex(0)
+    setLibraryBlob(null)
   }
 
   const formatTime = (seconds: number) => {
@@ -368,7 +704,6 @@ export default function IELTSPractice() {
   if (sessionStarted && (currentQuestion || currentReadingQuestion)) {
     const isReading = selectedType === 'reading'
     const totalQuestions = isReading ? selectedReadingQuestions.length : selectedQuestions.length
-    const questionId = isReading ? currentReadingQuestion?.id : currentQuestion?.id
 
     return (
       <div className="h-screen flex flex-col bg-gradient-to-br from-teal-50 to-cyan-50">
@@ -495,6 +830,20 @@ export default function IELTSPractice() {
                       <p className="text-sm text-gray-700 leading-relaxed">{currentQuestion.instructions}</p>
                     </div>
 
+                    {/* Audio Player for Custom Voice Session */}
+                    {isCustomVoiceSession && libraryBlob && (
+                      <div className="mb-6">
+                        <h3 className="text-sm font-semibold text-gray-700 mb-3">Listen to the audio sample:</h3>
+                        <audio 
+                          controls 
+                          className="w-full h-10 rounded-lg"
+                          src={URL.createObjectURL(libraryBlob)}
+                        >
+                          Your browser does not support the audio element.
+                        </audio>
+                      </div>
+                    )}
+
                     <div className="mb-6">
                       <h2 className="text-base font-bold text-gray-900 mb-3">Question</h2>
                       <p className="text-base text-gray-800 leading-relaxed">{currentQuestion.question}</p>
@@ -502,7 +851,7 @@ export default function IELTSPractice() {
 
                     {currentQuestion.keyPoints && currentQuestion.keyPoints.length > 0 && (
                       <div className="bg-teal-50 border-l-4 border-teal-500 p-4 rounded-r-lg">
-                        <p className="text-xs font-semibold text-gray-700 mb-2">💡 Key Points to Consider:</p>
+                        <p className="text-xs font-semibold text-gray-700 mb-2"> Key Points to Consider:</p>
                         <ul className="space-y-1.5 text-sm text-gray-700">
                           {currentQuestion.keyPoints.map((point, idx) => (
                             <li key={idx} className="flex items-start">
@@ -596,15 +945,11 @@ export default function IELTSPractice() {
 
             <button
               onClick={nextQuestion}
-              disabled={
-                selectedType === 'writing'
-                  ? !responses[questionId || '']
-                  : !analysis
-              }
+              disabled={false}
               className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white px-8 py-2.5 rounded-lg hover:from-teal-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold text-sm shadow-md flex items-center space-x-2"
             >
-              <span>{currentQuestionIndex === totalQuestions - 1 ? 'Complete Session' : 'Next Question'}</span>
-              {currentQuestionIndex < totalQuestions - 1 && <ArrowRight className="w-4 h-4" />}
+              <span>Next Question</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -969,10 +1314,15 @@ export default function IELTSPractice() {
                   : skill.type === 'writing'
                     ? 'from-orange-500 to-amber-600'
                     : 'from-emerald-500 to-teal-600'
-                } rounded-2xl p-6 shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer group relative overflow-hidden flex flex-col h-full`}
+              } rounded-2xl p-6 shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 cursor-pointer group relative overflow-hidden flex flex-col h-full`}
               onClick={() => {
-                setSelectedType(skill.type)
-                setShowPreferences(true)
+                if (skill.type === 'voice') {
+                  // For voice, start custom voice session directly
+                  startCustomVoiceSession()
+                } else {
+                  setSelectedType(skill.type)
+                  setShowPreferences(true)
+                }
               }}
             >
               <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>

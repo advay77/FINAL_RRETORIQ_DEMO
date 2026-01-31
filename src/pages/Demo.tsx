@@ -20,8 +20,8 @@ import {
 } from 'lucide-react'
 import SEO, { seoData } from '../components/SEO'
 import { speechToTextService } from '../services/speechToTextService'
-import { openAIAnalysisService } from '../services/openAIAnalysisService'
-import type { AnswerAnalysis, InterviewQuestion } from '../services/openAIAnalysisService'
+import { geminiAnalysisService } from '../services/geminiAnalysisService'
+import type { AnswerAnalysis, InterviewQuestion } from '../services/geminiAnalysisService'
 
 interface DemoState {
   isRecording: boolean
@@ -145,7 +145,7 @@ const Demo: React.FC = () => {
 
           // Start AI analysis
           const question = activeDemo === 'communication' ? communicationQuestion : interviewQuestion
-          const analysisResult = await openAIAnalysisService.analyzeAnswer({
+          const analysisResult = await geminiAnalysisService.processAudioResponse({
             transcript: transcriptionResult.transcript,
             question,
             audioDuration: demoState.duration,
