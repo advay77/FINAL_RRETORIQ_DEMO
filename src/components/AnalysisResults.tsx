@@ -19,7 +19,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react'
-import type { AnswerAnalysis } from '../services/openAIAnalysisService'
+import type { AnswerAnalysis } from '../services/geminiAnalysisService'
 
 interface AnalysisResultsProps {
   analysis: AnswerAnalysis

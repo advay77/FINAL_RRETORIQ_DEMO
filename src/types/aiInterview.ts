@@ -1,8 +1,8 @@
 import type { Question } from './questions';
-import type { AnswerAnalysis } from '../services/openAIAnalysisService';
+import type { AnswerAnalysis } from '../services/geminiAnalysisService';
 
-// AI Evaluation Types (using AnswerAnalysis from openAIAnalysisService)
-// Note: AnswerAnalysis interface is imported from '../services/openAIAnalysisService'
+// AI Evaluation Types (using AnswerAnalysis from geminiAnalysisService)
+// Note: AnswerAnalysis interface is imported from '../services/geminiAnalysisService'
 
 // Speech Recognition Types
 interface SpeechGrammarList {
@@ -252,4 +252,4 @@ export interface SessionEventHandler {
 
 // Export all types for use in components
 export * from './questions';
-export * from '../services/openAIAnalysisService';
+export * from '../services/geminiAnalysisService';

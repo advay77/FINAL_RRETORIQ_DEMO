@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Question } from '../types/questions';
-import type { AnswerAnalysis } from './openAIAnalysisService';
+import type { AnswerAnalysis } from './geminiAnalysisService';
 
 export interface StoredAnswer {
   id?: string;
