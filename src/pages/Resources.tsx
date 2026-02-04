@@ -1,7 +1,15 @@
 import { useState } from 'react'
 import { BookOpen, FileText, X } from 'lucide-react'
 import SEO from '../components/SEO'
-import { starFrameworkQuestions, type FrameworkQA } from '../data/frameworkQuestions'
+import {
+  starFrameworkQuestions,
+  soarFrameworkQuestions,
+  prepFrameworkQuestions,
+  whwFrameworkQuestions,
+  carFrameworkQuestions,
+  a3FrameworkQuestions,
+  type FrameworkQA
+} from '../data/frameworkQuestions'
 
 interface Resource {
   id: number
@@ -175,7 +183,8 @@ const sampleFrameworks: SampleFramework[] = [
       { label: 'Obstacle', text: 'name the blocker, risk, or constraint.' },
       { label: 'Action', text: 'show how you removed or reduced that obstacle.' },
       { label: 'Result', text: 'share the measurable finish and the confidence gain.' }
-    ]
+    ],
+    questions: soarFrameworkQuestions
   },
   {
     id: 3,
@@ -190,7 +199,8 @@ const sampleFrameworks: SampleFramework[] = [
       { label: 'Reason', text: 'explain the logic or evidence behind it.' },
       { label: 'Example', text: 'use a short story or data point to make it real.' },
       { label: 'Point', text: 'close by restating the position with confidence.' }
-    ]
+    ],
+    questions: prepFrameworkQuestions
   },
   {
     id: 4,
@@ -204,7 +214,8 @@ const sampleFrameworks: SampleFramework[] = [
       { label: 'Why', text: 'start with the intent or goal that guided you.' },
       { label: 'How', text: 'outline the plan, process, or guardrails you chose.' },
       { label: 'What', text: 'describe the concrete actions, artifacts, or deliverables that came out of it.' }
-    ]
+    ],
+    questions: whwFrameworkQuestions
   },
   {
     id: 5,
@@ -218,7 +229,8 @@ const sampleFrameworks: SampleFramework[] = [
       { label: 'Context', text: 'the situation in one tight line.' },
       { label: 'Action', text: 'the top one or two moves you made, prioritized.' },
       { label: 'Result', text: 'the outcome with a metric, plus what changed for the team or user.' }
-    ]
+    ],
+    questions: carFrameworkQuestions
   },
   {
     id: 6,
@@ -232,7 +244,8 @@ const sampleFrameworks: SampleFramework[] = [
       { label: 'Action', text: 'describe what you tried first.' },
       { label: 'Analysis', text: 'share what you observed and how you measured it.' },
       { label: 'Adjustment', text: 'explain the changes you made based on the signal and what you would try next.' }
-    ]
+    ],
+    questions: a3FrameworkQuestions
   }
 ]
 
@@ -489,9 +502,6 @@ export default function Resources() {
                               <h3 className="font-bold text-white text-xl">
                                 Sample Questions & Answers
                               </h3>
-                              <p className="text-white/90 text-sm mt-1">
-                                {framework.questions.length} questions to practice
-                              </p>
                             </div>
 
                             <div className="p-6 space-y-5">
@@ -514,6 +524,7 @@ export default function Resources() {
                                       Answer ({framework.title}):
                                     </p>
 
+                                    {/* STAR Framework */}
                                     {qa.answer.S && (
                                       <div className="text-sm leading-relaxed">
                                         <span className="font-bold text-emerald-600">S:</span>{' '}
@@ -528,21 +539,7 @@ export default function Resources() {
                                       </div>
                                     )}
 
-                                    {qa.answer.A && (
-                                      <div className="text-sm leading-relaxed">
-                                        <span className="font-bold text-purple-600">A:</span>{' '}
-                                        <span className="text-gray-700">{qa.answer.A}</span>
-                                      </div>
-                                    )}
-
-                                    {qa.answer.R && (
-                                      <div className="text-sm leading-relaxed">
-                                        <span className="font-bold text-orange-600">R:</span>{' '}
-                                        <span className="text-gray-700">{qa.answer.R}</span>
-                                      </div>
-                                    )}
-
-                                    {/* Add support for other framework formats */}
+                                    {/* SOAR Obstacle */}
                                     {qa.answer.O && (
                                       <div className="text-sm leading-relaxed">
                                         <span className="font-bold text-amber-600">O:</span>{' '}
@@ -550,6 +547,23 @@ export default function Resources() {
                                       </div>
                                     )}
 
+                                    {/* Common Action field (used by STAR, SOAR, CAR, A3) */}
+                                    {(qa.answer.A || qa.answer.Action) && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-purple-600">A:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.A || qa.answer.Action}</span>
+                                      </div>
+                                    )}
+
+                                    {/* Common Result field (used by STAR, SOAR, CAR) */}
+                                    {(qa.answer.R || qa.answer.Result) && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-orange-600">R:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.R || qa.answer.Result}</span>
+                                      </div>
+                                    )}
+
+                                    {/* PREP Framework */}
                                     {qa.answer.P && (
                                       <div className="text-sm leading-relaxed">
                                         <span className="font-bold text-rose-600">P:</span>{' '}
@@ -561,6 +575,58 @@ export default function Resources() {
                                       <div className="text-sm leading-relaxed">
                                         <span className="font-bold text-cyan-600">E:</span>{' '}
                                         <span className="text-gray-700">{qa.answer.E}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.ConcludingPoint && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-rose-600">P:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.ConcludingPoint}</span>
+                                      </div>
+                                    )}
+
+                                    {/* WHW Framework */}
+                                    {qa.answer.Why && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-pink-600">Why:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.Why}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.How && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-violet-600">How:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.How}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.What && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-indigo-600">What:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.What}</span>
+                                      </div>
+                                    )}
+
+                                    {/* CAR Framework */}
+                                    {qa.answer.Context && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-sky-600">C:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.Context}</span>
+                                      </div>
+                                    )}
+
+                                    {/* A3 Framework */}
+                                    {qa.answer.Analysis && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-teal-600">An:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.Analysis}</span>
+                                      </div>
+                                    )}
+
+                                    {qa.answer.Adjustment && (
+                                      <div className="text-sm leading-relaxed">
+                                        <span className="font-bold text-fuchsia-600">Ad:</span>{' '}
+                                        <span className="text-gray-700">{qa.answer.Adjustment}</span>
                                       </div>
                                     )}
                                   </div>
