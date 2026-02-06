@@ -34,6 +34,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Allow-list for access gate (public read only)
+    match /allowed_emails/{emailDoc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Session storage used by firebaseSessionService
     match /sessions/{sessionId} {
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;

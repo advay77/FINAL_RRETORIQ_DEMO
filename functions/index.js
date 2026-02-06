@@ -151,6 +151,22 @@ app.post('/whisper-proxy', upload.single('file'), async (req, res) => {
   }
 })
 
+// Access gate: server-side allow-list check
+app.post('/access-check', async (req, res) => {
+  try {
+    const emailRaw = (req.body?.email || '').toString().trim().toLowerCase()
+    if (!emailRaw) return res.status(400).json({ error: 'Missing email' })
+
+    const docRef = admin.firestore().collection('allowed_emails').doc(emailRaw)
+    const docSnap = await docRef.get()
+
+    return res.json({ allowed: docSnap.exists })
+  } catch (err) {
+    console.error('Access check error:', err)
+    return res.status(500).json({ error: 'Access check failed' })
+  }
+})
+
 // Health
 app.get('/health', (req, res) => {
   res.json({ ok: true })

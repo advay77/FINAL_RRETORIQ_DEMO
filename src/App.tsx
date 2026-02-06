@@ -31,6 +31,7 @@ import PlanUpgrade from './pages/PlanUpgrade'
 import InstitutionAdminDashboard from './pages/admin/InstitutionAdminDashboard'
 import StudentsDetails from './pages/admin/StudentsDetails'
 import { MessageCircle, Shield, FileText } from 'lucide-react'
+import AccessGateRoute from './components/AccessGateRoute'
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -71,9 +72,11 @@ function App() {
 
             {/* Auth Route (redirect to dashboard if already authenticated) */}
             <Route path="/login" element={
-              <ProtectedRoute requireAuth={false}>
-                <AuthPage />
-              </ProtectedRoute>
+              <AccessGateRoute>
+                <ProtectedRoute requireAuth={false}>
+                  <AuthPage />
+                </ProtectedRoute>
+              </AccessGateRoute>
             } />
             <Route path="/register" element={
               <Navigate to="/login" replace />
